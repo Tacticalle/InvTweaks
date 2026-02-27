@@ -1,0 +1,12 @@
+{
+	"required": true,
+	"package": "tacticalle.invtweaks.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"HandledScreenAccessor",
+		"HandledScreenMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

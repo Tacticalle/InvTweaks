@@ -1,0 +1,40 @@
+{
+	"schemaVersion": 1,
+	"id": "invtweaks",
+	"version": "${version}",
+	"name": "InvTweaks",
+	"description": "Quality of life inventory tweaks: move all-but-1 or exactly-1 items with modifier keys, bundle insert/extract controls, and more.",
+	"authors": [ "Tacticalle" ],
+	"license": "MIT",
+	"icon": "assets/invtweaks/icon.png",
+	"environment": "*",
+
+	"entrypoints": {
+		"main": [
+			"tacticalle.invtweaks.InvTweaks"
+		],
+		"client": [
+			"tacticalle.invtweaks.InvTweaksClient"
+		],
+		"fabric-datagen": [
+			"tacticalle.invtweaks.InvTweaksDataGenerator"
+		],
+		"modmenu": [
+			"tacticalle.invtweaks.InvTweaksModMenu"
+		]
+	},
+
+	"mixins": [
+		"invtweaks.mixins.json"
+	],
+
+	"depends": {
+		"fabricloader": ">=0.16.14",
+		"fabric-api": "*",
+		"minecraft": "~1.21.10",
+		"java": ">=21"
+	},
+	"suggests": {
+		"modmenu": "*"
+	}
+}
