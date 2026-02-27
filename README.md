@@ -1,6 +1,6 @@
 # InvTweaks
 
-A Fabric mod for Minecraft that gives you precise control over how many items you pick up, transfer, and insert. Hold modifier keys while clicking to leave one behind, take exactly one, or manage bundles with surgical precision.
+A Fabric mod for Minecraft that gives you precise control over how many items you pick up, transfer, and insert. Hold modifier keys while clicking to leave one behind, take exactly one, and manage bundles.
 
 ## Features
 
@@ -44,7 +44,7 @@ InvTweaks is designed to work alongside other inventory mods:
 
 ### macOS Note
 
-InvTweaks includes specific handling for macOS `Cmd+Shift+Click` bulk-move behavior, preventing conflicts with the modifier key system.
+InvTweaks includes specific handling for macOS `Cmd+Shift+Click` bulk-move behavior, preventing conflicts with the modifier key system. MacOS users should install [MacOS Input Fixes](https://modrinth.com/mod/macos-input-fixes) for full compatability.
 
 ### Known Limitations
 
