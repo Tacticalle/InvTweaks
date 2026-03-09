@@ -18,7 +18,7 @@ public class InvTweaksConfig {
 
     private static InvTweaksConfig INSTANCE;
 
-    // Modifier key GLFW codes
+    // Global modifier key GLFW codes (defaults)
     // "All But 1" key: action takes/moves all but 1 (default: Left Ctrl)
     public int allBut1Key = GLFW.GLFW_KEY_LEFT_CONTROL;
     // "Only 1" key: action takes/moves exactly 1 (default: Left Alt)
@@ -31,16 +31,109 @@ public class InvTweaksConfig {
     public boolean enableBundleInsertCursorBundle = true;
     public boolean enableBundleInsertCursorItems = true;
 
-    // Per-feature flip: when true, the modifier keys swap behavior for this feature.
-    // e.g., if flipped, the "All But 1" key does "Only 1" for this feature and vice versa.
-    public boolean flipClickPickup = false;
-    public boolean flipShiftClickTransfer = false;
-    public boolean flipBundleExtract = false;
-    public boolean flipBundleInsertCursorBundle = false;
-    public boolean flipBundleInsertCursorItems = false;
+    // Per-tweak modifier key overrides (-1 means "use global default")
+    public int clickPickupAllBut1Key = -1;
+    public int clickPickupOnly1Key = -1;
+    public int shiftClickAllBut1Key = -1;
+    public int shiftClickOnly1Key = -1;
+    public int bundleExtractAllBut1Key = -1;
+    public int bundleExtractOnly1Key = -1;
+    public int bundleInsertBundleAllBut1Key = -1;
+    public int bundleInsertBundleOnly1Key = -1;
+    public int bundleInsertItemsAllBut1Key = -1;
+    public int bundleInsertItemsOnly1Key = -1;
 
-    // Debug logging: when enabled, logs detailed info about every modifier-key action to the game log.
+    // Debug logging
     public boolean enableDebugLogging = false;
+
+    // ========== Per-tweak effective key helpers ==========
+
+    /**
+     * Get the effective "All But 1" key for a given tweak.
+     * Returns the per-tweak override if set (not -1), otherwise the global key.
+     */
+    public int getEffectiveAllBut1Key(String tweakName) {
+        int perTweak = switch (tweakName) {
+            case "clickPickup" -> clickPickupAllBut1Key;
+            case "shiftClick" -> shiftClickAllBut1Key;
+            case "bundleExtract" -> bundleExtractAllBut1Key;
+            case "bundleInsertBundle" -> bundleInsertBundleAllBut1Key;
+            case "bundleInsertItems" -> bundleInsertItemsAllBut1Key;
+            default -> -1;
+        };
+        return perTweak != -1 ? perTweak : allBut1Key;
+    }
+
+    /**
+     * Get the effective "Only 1" key for a given tweak.
+     * Returns the per-tweak override if set (not -1), otherwise the global key.
+     */
+    public int getEffectiveOnly1Key(String tweakName) {
+        int perTweak = switch (tweakName) {
+            case "clickPickup" -> clickPickupOnly1Key;
+            case "shiftClick" -> shiftClickOnly1Key;
+            case "bundleExtract" -> bundleExtractOnly1Key;
+            case "bundleInsertBundle" -> bundleInsertBundleOnly1Key;
+            case "bundleInsertItems" -> bundleInsertItemsOnly1Key;
+            default -> -1;
+        };
+        return perTweak != -1 ? perTweak : only1Key;
+    }
+
+    /**
+     * Check if a tweak is using custom (non-global) keys.
+     */
+    public boolean hasCustomKeys(String tweakName) {
+        return switch (tweakName) {
+            case "clickPickup" -> clickPickupAllBut1Key != -1 || clickPickupOnly1Key != -1;
+            case "shiftClick" -> shiftClickAllBut1Key != -1 || shiftClickOnly1Key != -1;
+            case "bundleExtract" -> bundleExtractAllBut1Key != -1 || bundleExtractOnly1Key != -1;
+            case "bundleInsertBundle" -> bundleInsertBundleAllBut1Key != -1 || bundleInsertBundleOnly1Key != -1;
+            case "bundleInsertItems" -> bundleInsertItemsAllBut1Key != -1 || bundleInsertItemsOnly1Key != -1;
+            default -> false;
+        };
+    }
+
+    /**
+     * Set the per-tweak override keys. Pass -1 to reset to global.
+     */
+    public void setPerTweakAllBut1Key(String tweakName, int keyCode) {
+        switch (tweakName) {
+            case "clickPickup" -> clickPickupAllBut1Key = keyCode;
+            case "shiftClick" -> shiftClickAllBut1Key = keyCode;
+            case "bundleExtract" -> bundleExtractAllBut1Key = keyCode;
+            case "bundleInsertBundle" -> bundleInsertBundleAllBut1Key = keyCode;
+            case "bundleInsertItems" -> bundleInsertItemsAllBut1Key = keyCode;
+        }
+    }
+
+    public void setPerTweakOnly1Key(String tweakName, int keyCode) {
+        switch (tweakName) {
+            case "clickPickup" -> clickPickupOnly1Key = keyCode;
+            case "shiftClick" -> shiftClickOnly1Key = keyCode;
+            case "bundleExtract" -> bundleExtractOnly1Key = keyCode;
+            case "bundleInsertBundle" -> bundleInsertBundleOnly1Key = keyCode;
+            case "bundleInsertItems" -> bundleInsertItemsOnly1Key = keyCode;
+        }
+    }
+
+    /**
+     * Reset a tweak's keys back to global defaults.
+     */
+    public void resetToGlobal(String tweakName) {
+        setPerTweakAllBut1Key(tweakName, -1);
+        setPerTweakOnly1Key(tweakName, -1);
+    }
+
+    /**
+     * Initialize a tweak's custom keys from the current global values.
+     */
+    public void initCustomFromGlobal(String tweakName) {
+        setPerTweakAllBut1Key(tweakName, allBut1Key);
+        setPerTweakOnly1Key(tweakName, only1Key);
+    }
+
+    // ========== Singleton & persistence ==========
 
     public static InvTweaksConfig get() {
         if (INSTANCE == null) {
@@ -83,9 +176,7 @@ public class InvTweaksConfig {
      */
     public static boolean isKeyPressed(int glfwKey) {
         long windowHandle = net.minecraft.client.MinecraftClient.getInstance().getWindow().getHandle();
-        // Check exact key
         if (GLFW.glfwGetKey(windowHandle, glfwKey) == GLFW.GLFW_PRESS) return true;
-        // Also check the paired modifier key (left/right)
         int pair = getPairedKey(glfwKey);
         if (pair != -1 && GLFW.glfwGetKey(windowHandle, pair) == GLFW.GLFW_PRESS) return true;
         return false;
@@ -125,18 +216,56 @@ public class InvTweaksConfig {
     }
 
     /**
-     * Determine which mode is active for a feature, considering the flip state.
+     * Determine which mode is active for a feature using GLOBAL keys, 
      * Returns: "allbut1", "only1", or null if neither modifier is pressed.
+     * @deprecated Use getActiveMode(boolean, String) for per-tweak key support.
      */
-    public String getActiveMode(boolean flipped) {
+    @Deprecated
+    public String getActiveMode() {
         boolean allBut1Pressed = isKeyPressed(allBut1Key);
         boolean only1Pressed = isKeyPressed(only1Key);
 
         if (allBut1Pressed && !only1Pressed) {
-            return flipped ? "only1" : "allbut1";
+            return "allbut1";
         } else if (only1Pressed && !allBut1Pressed) {
-            return flipped ? "allbut1" : "only1";
+            return "only1";
         }
-        return null; // neither or both pressed
+        return null;
+    }
+
+    /**
+     * Determine which mode is active for a feature using per-tweak effective keys.
+     * Returns: "allbut1", "only1", or null if neither modifier is pressed.
+     */
+    public String getActiveMode(String tweakName) {
+        int effectiveAllBut1 = getEffectiveAllBut1Key(tweakName);
+        int effectiveOnly1 = getEffectiveOnly1Key(tweakName);
+
+        boolean allBut1Pressed = isKeyPressed(effectiveAllBut1);
+        boolean only1Pressed = isKeyPressed(effectiveOnly1);
+
+        if (allBut1Pressed && !only1Pressed) {
+            return "allbut1";
+        } else if (only1Pressed && !allBut1Pressed) {
+            return "only1";
+        }
+        return null;
+    }
+
+    /**
+     * Check if ANY modifier key (across all tweaks) is currently pressed.
+     * Used for the global PICKUP_ALL block in the mixin HEAD.
+     */
+    public boolean isAnyModifierPressed() {
+        if (isKeyPressed(allBut1Key) || isKeyPressed(only1Key)) return true;
+        String[] tweaks = {"clickPickup", "shiftClick", "bundleExtract", "bundleInsertBundle", "bundleInsertItems"};
+        for (String tweak : tweaks) {
+            if (hasCustomKeys(tweak)) {
+                int ab1 = getEffectiveAllBut1Key(tweak);
+                int o1 = getEffectiveOnly1Key(tweak);
+                if (isKeyPressed(ab1) || isKeyPressed(o1)) return true;
+            }
+        }
+        return false;
     }
 }

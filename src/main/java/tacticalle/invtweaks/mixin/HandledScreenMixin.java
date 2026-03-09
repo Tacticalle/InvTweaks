@@ -59,21 +59,20 @@ public abstract class HandledScreenMixin {
                               GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
 
         // Debug logging
-        boolean allBut1Down = InvTweaksConfig.isKeyPressed(config.allBut1Key);
-        boolean only1Down = InvTweaksConfig.isKeyPressed(config.only1Key);
-        if (config.enableDebugLogging && (allBut1Down || only1Down)) {
+        boolean anyModDown = config.isAnyModifierPressed();
+        if (config.enableDebugLogging && anyModDown) {
             String screenType = ((Object) this).getClass().getSimpleName();
-            LOGGER.info("IT HEAD: screen={}, slot={}, button={}, action={}, allBut1Key={}({}), only1Key={}({}), shift={}",
+            LOGGER.info("IT HEAD: screen={}, slot={}, button={}, action={}, globalAllBut1Key={}({}), globalOnly1Key={}({}), shift={}",
                 screenType, slotId, button, actionType,
-                InvTweaksConfig.getKeyName(config.allBut1Key), allBut1Down,
-                InvTweaksConfig.getKeyName(config.only1Key), only1Down,
+                InvTweaksConfig.getKeyName(config.allBut1Key), InvTweaksConfig.isKeyPressed(config.allBut1Key),
+                InvTweaksConfig.getKeyName(config.only1Key), InvTweaksConfig.isKeyPressed(config.only1Key),
                 shiftPressed);
         }
 
         // Block vanilla PICKUP_ALL (double-click gather) when modifier keys are held.
         // This prevents double-clicking from collecting matching items from all slots.
         // Note: THROW (Ctrl+Q drop) is intentionally NOT blocked — players need it.
-        if (allBut1Down || only1Down) {
+        if (anyModDown) {
             if (actionType == SlotActionType.PICKUP_ALL) {
                 ci.cancel();
                 return;
@@ -82,7 +81,7 @@ public abstract class HandledScreenMixin {
 
         // Shift+Click transfer
         if (shiftPressed && actionType == SlotActionType.QUICK_MOVE && config.enableShiftClickTransfer) {
-            String mode = config.getActiveMode(config.flipShiftClickTransfer);
+            String mode = config.getActiveMode("shiftClick");
             if (mode != null) {
                 // Guard against macOS Command+Shift+Click bulk-move:
                 // macOS fires QUICK_MOVE for ALL slots with matching items, not just the clicked one.
@@ -168,7 +167,7 @@ public abstract class HandledScreenMixin {
             ItemStack slotStack = slot.getStack();
             if (cursorStack.getItem() instanceof BundleItem && !slotStack.isEmpty()
                     && config.enableBundleInsertCursorBundle) {
-                String mode = config.getActiveMode(config.flipBundleInsertCursorBundle);
+                String mode = config.getActiveMode("bundleInsertBundle");
                 if (mode != null) {
                     it_bundleInsertSlotCount = slotStack.getCount();
                     it_bundleInsertPending = true;
@@ -177,7 +176,7 @@ public abstract class HandledScreenMixin {
             } else if (slotStack.getItem() instanceof BundleItem && !cursorStack.isEmpty()
                        && !(cursorStack.getItem() instanceof BundleItem)
                        && config.enableBundleInsertCursorItems) {
-                String mode = config.getActiveMode(config.flipBundleInsertCursorItems);
+                String mode = config.getActiveMode("bundleInsertItems");
                 if (mode != null) {
                     it_bundleInsertSlotCount = cursorStack.getCount();
                     it_bundleInsertPending = true;
@@ -218,7 +217,7 @@ public abstract class HandledScreenMixin {
             // Bundle extract: right-click on bundle
             if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT && slot.getStack().getItem() instanceof BundleItem
                     && config.enableBundleExtract) {
-                String mode = config.getActiveMode(config.flipBundleExtract);
+                String mode = config.getActiveMode("bundleExtract");
                 if (mode != null) {
                     it_handleBundleExtract(slot, slotId, im, player, mode);
                     return;
@@ -233,7 +232,7 @@ public abstract class HandledScreenMixin {
 
             // Click pickup
             if (config.enableClickPickup) {
-                String mode = config.getActiveMode(config.flipClickPickup);
+                String mode = config.getActiveMode("clickPickup");
                 if (mode != null) {
                     if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
                         it_handlePickup(slot, slotId, im, player, mode);

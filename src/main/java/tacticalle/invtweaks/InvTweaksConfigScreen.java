@@ -13,6 +13,7 @@ import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -29,92 +30,278 @@ public class InvTweaksConfigScreen extends Screen {
     private static final int GRAY = 0xFF999999;
     private static final int DARK_GRAY = 0xFF666666;
     private static final int AQUA = 0xFF55FFFF;
+    private static final int GREEN = 0xFF55FF55;
+    private static final int RED = 0xFFFF5555;
+    private static final int ORANGE = 0xFFFFAA00;
 
+    // Key capture state
     private String capturingKey = null;
-    private ButtonWidget allBut1KeyBtn;
-    private ButtonWidget only1KeyBtn;
+    private ButtonWidget capturingButton = null;
+
+    // Tab state
+    private enum Tab { ALL, TWEAKS, HOTKEYS, DEBUG }
+    private Tab activeTab = Tab.ALL;
+    private final List<ButtonWidget> tabButtons = new ArrayList<>();
+
+    // Global key buttons (tracked for capture updates)
+    private ButtonWidget globalAllBut1KeyBtn;
+    private ButtonWidget globalOnly1KeyBtn;
     private ButtonWidget openConfigKeyBtn;
+
+    // Per-tweak key buttons (tracked for capture updates)
+    private record TweakKeyButtons(String tweakName, ButtonWidget allBut1Btn, ButtonWidget only1Btn) {}
+    private final List<TweakKeyButtons> tweakKeyButtons = new ArrayList<>();
+
+    // Current entry list (for rebuilding on tab switch)
+    private ConfigEntryList entryList;
+
+    // Responsive layout calculations
+    private int rowWidth;
+    private int contentLeft;
 
     public InvTweaksConfigScreen(Screen parent) {
         super(Text.literal("InvTweaks Configuration"));
         this.parent = parent;
     }
 
+    // ========== Responsive layout helpers ==========
+
+    private void calculateLayout() {
+        // Row width: 70% of screen, clamped between 350 and 600
+        rowWidth = Math.max(350, Math.min(600, (int)(this.width * 0.7)));
+        contentLeft = (this.width - rowWidth) / 2;
+    }
+
+    private int scaledButtonWidth(int baseWidth) {
+        // Scale buttons proportionally with row width, based on 400px reference
+        return Math.max(baseWidth, (int)(baseWidth * (rowWidth / 400.0)));
+    }
+
+    // ========== Init ==========
+
     @Override
     protected void init() {
         super.init();
         config = InvTweaksConfig.get();
+        tweakKeyButtons.clear();
+        tabButtons.clear();
+        calculateLayout();
 
-        int listTop = 32;
-        int listBottom = this.height - 32;
         int centerX = this.width / 2;
 
-        ConfigEntryList entryList = new ConfigEntryList(this.client, this.width, listBottom - listTop, listTop, ROW_HEIGHT);
+        // ---- Tab bar ----
+        int tabCount = Tab.values().length;
+        int tabBarWidth = Math.min(rowWidth, this.width - 20);
+        int tabGap = 4;
+        int totalGaps = (tabCount - 1) * tabGap;
+        int tabW = (tabBarWidth - totalGaps) / tabCount;
+        int tabBarLeft = (this.width - tabBarWidth) / 2;
+        int tabY = 28;
 
-        int btnW = 80;
-        int toggleW = 40;
-        int flipW = 55;
+        String[] tabLabels = {"All", "Tweaks", "Hotkeys", "Debug"};
+        Tab[] tabValues = Tab.values();
+        for (int i = 0; i < tabCount; i++) {
+            final Tab tab = tabValues[i];
+            int tx = tabBarLeft + i * (tabW + tabGap);
+            ButtonWidget tabBtn = ButtonWidget.builder(
+                    Text.literal(tabLabels[i]),
+                    button -> switchTab(tab)
+            ).dimensions(tx, tabY, tabW, BUTTON_HEIGHT).build();
+            tabButtons.add(tabBtn);
+            addDrawableChild(tabBtn);
+        }
+        updateTabHighlights();
 
-        // Key assignment rows
-        allBut1KeyBtn = ButtonWidget.builder(
-                Text.literal(InvTweaksConfig.getKeyName(config.allBut1Key)),
-                button -> {
-                    capturingKey = "allbut1";
-                    button.setMessage(Text.literal("> Press a key <"));
-                }).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
-        entryList.addConfigEntry(new KeyBindEntry("All But 1 key:", "(take/move all but 1)", YELLOW, allBut1KeyBtn));
-
-        only1KeyBtn = ButtonWidget.builder(
-                Text.literal(InvTweaksConfig.getKeyName(config.only1Key)),
-                button -> {
-                    capturingKey = "only1";
-                    button.setMessage(Text.literal("> Press a key <"));
-                }).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
-        entryList.addConfigEntry(new KeyBindEntry("Only 1 key:", "(take/move exactly 1)", AQUA, only1KeyBtn));
-
-        // Open Config keybind row — reads from the Fabric KeyBinding directly
-        KeyBinding configKey = InvTweaksClient.openConfigKey;
-        String configKeyName = configKey != null
-                ? configKey.getBoundKeyLocalizedText().getString()
-                : "?";
-        openConfigKeyBtn = ButtonWidget.builder(
-                Text.literal(configKeyName),
-                button -> {
-                    capturingKey = "openconfig";
-                    button.setMessage(Text.literal("> Press a key <"));
-                }).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
-        // Section header
-        entryList.addConfigEntry(new HeaderEntry("Enabled", "Keys"));
-
-        // Feature rows
-        entryList.addConfigEntry(new FeatureEntry("Click Pickup", toggleW, flipW,
-                () -> config.enableClickPickup, v -> config.enableClickPickup = v,
-                () -> config.flipClickPickup, v -> config.flipClickPickup = v));
-        entryList.addConfigEntry(new FeatureEntry("Shift+Click Transfer", toggleW, flipW,
-                () -> config.enableShiftClickTransfer, v -> config.enableShiftClickTransfer = v,
-                () -> config.flipShiftClickTransfer, v -> config.flipShiftClickTransfer = v));
-        entryList.addConfigEntry(new FeatureEntry("Bundle Extract", toggleW, flipW,
-                () -> config.enableBundleExtract, v -> config.enableBundleExtract = v,
-                () -> config.flipBundleExtract, v -> config.flipBundleExtract = v));
-        entryList.addConfigEntry(new FeatureEntry("Bundle Insert (picking up with bundle)", toggleW, flipW,
-                () -> config.enableBundleInsertCursorBundle, v -> config.enableBundleInsertCursorBundle = v,
-                () -> config.flipBundleInsertCursorBundle, v -> config.flipBundleInsertCursorBundle = v));
-        entryList.addConfigEntry(new FeatureEntry("Bundle Insert (placing into bundle)", toggleW, flipW,
-                () -> config.enableBundleInsertCursorItems, v -> config.enableBundleInsertCursorItems = v,
-                () -> config.flipBundleInsertCursorItems, v -> config.flipBundleInsertCursorItems = v));
-
-        entryList.addConfigEntry(new KeyBindEntry("Open Config key:", "(open this screen)", GRAY, openConfigKeyBtn));
-        // Debug logging
-        entryList.addConfigEntry(new DebugEntry("Debug Logging", toggleW,
-                () -> config.enableDebugLogging, v -> config.enableDebugLogging = v));
-
+        // ---- Entry list ----
+        int listTop = tabY + BUTTON_HEIGHT + 6;
+        int listBottom = this.height - 32;
+        entryList = new ConfigEntryList(this.client, this.width, listBottom - listTop, listTop, ROW_HEIGHT);
+        populateEntryList();
         addDrawableChild(entryList);
 
-        // Done button (fixed at bottom)
+        // ---- Done button (fixed at bottom) ----
+        int doneW = Math.max(100, scaledButtonWidth(100));
         addDrawableChild(ButtonWidget.builder(Text.literal("Done"), button -> {
             config.save();
             if (client != null) client.setScreen(parent);
-        }).dimensions(centerX - 50, this.height - 27, 100, BUTTON_HEIGHT).build());
+        }).dimensions(centerX - doneW / 2, this.height - 27, doneW, BUTTON_HEIGHT).build());
+    }
+
+    // ========== Tab switching ==========
+
+    private void switchTab(Tab tab) {
+        activeTab = tab;
+        updateTabHighlights();
+        rebuildEntryList();
+    }
+
+    private void updateTabHighlights() {
+        Tab[] tabs = Tab.values();
+        for (int i = 0; i < tabButtons.size(); i++) {
+            ButtonWidget btn = tabButtons.get(i);
+            boolean active = tabs[i] == activeTab;
+            // Active tab gets highlighted text, inactive gets plain
+            String label = switch (tabs[i]) {
+                case ALL -> "All";
+                case TWEAKS -> "Tweaks";
+                case HOTKEYS -> "Hotkeys";
+                case DEBUG -> "Debug";
+            };
+            if (active) {
+                btn.setMessage(Text.literal("\u00a7n" + label)); // underlined
+            } else {
+                btn.setMessage(Text.literal(label));
+            }
+        }
+    }
+
+    private void rebuildEntryList() {
+
+        // Remove the old entry list widget entirely
+        remove(entryList);
+        // Recreate it
+        int listTop = 28 + BUTTON_HEIGHT + 6;
+        int listBottom = this.height - 32;
+        entryList = new ConfigEntryList(this.client, this.width, listBottom - listTop, listTop, ROW_HEIGHT);
+        populateEntryList();
+        addDrawableChild(entryList);
+
+    }
+
+    // ========== Populate entries based on active tab ==========
+
+    private void populateEntryList() {
+        int keyBtnW = scaledButtonWidth(80);
+        int toggleW = scaledButtonWidth(40);
+
+        switch (activeTab) {
+            case ALL -> {
+                addHotkeyEntries(keyBtnW);
+                addTweakEntries(toggleW);
+                addPerTweakKeyEntries(keyBtnW);
+                addDebugEntries(toggleW);
+            }
+            case TWEAKS -> {
+                addTweakEntries(toggleW);
+            }
+            case HOTKEYS -> {
+                addHotkeyEntries(keyBtnW);
+                addPerTweakKeyEntries(keyBtnW);
+            }
+            case DEBUG -> {
+                addDebugEntries(toggleW);
+            }
+        }
+    }
+
+    // ---- Hotkey section: global keys + open config key ----
+
+    private void addHotkeyEntries(int keyBtnW) {
+        entryList.addConfigEntry(new SectionHeaderEntry("\u00a7l--- Global Modifier Keys ---"));
+
+        globalAllBut1KeyBtn = ButtonWidget.builder(
+                Text.literal(InvTweaksConfig.getKeyName(config.allBut1Key)),
+                button -> startCapture("global_allbut1", button)
+        ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new KeyBindEntry("All But 1 key:", "(take/move all but 1)", YELLOW, globalAllBut1KeyBtn));
+
+        globalOnly1KeyBtn = ButtonWidget.builder(
+                Text.literal(InvTweaksConfig.getKeyName(config.only1Key)),
+                button -> startCapture("global_only1", button)
+        ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new KeyBindEntry("Only 1 key:", "(take/move exactly 1)", AQUA, globalOnly1KeyBtn));
+
+        // Open Config keybind row
+        KeyBinding configKey = InvTweaksClient.openConfigKey;
+        String configKeyName = configKey != null ? configKey.getBoundKeyLocalizedText().getString() : "?";
+        openConfigKeyBtn = ButtonWidget.builder(
+                Text.literal(configKeyName),
+                button -> startCapture("openconfig", button)
+        ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new KeyBindEntry("Open Config key:", "(open this screen)", GRAY, openConfigKeyBtn));
+    }
+
+    // ---- Per-tweak key overrides ----
+
+    private void addPerTweakKeyEntries(int keyBtnW) {
+        entryList.addConfigEntry(new SectionHeaderEntry("\u00a7l--- Per-Tweak Key Overrides ---"));
+
+        addPerTweakKeyRow("clickPickup", "Click Pickup", keyBtnW);
+        addPerTweakKeyRow("shiftClick", "Shift+Click Transfer", keyBtnW);
+        addPerTweakKeyRow("bundleExtract", "Bundle Extract", keyBtnW);
+        addPerTweakKeyRow("bundleInsertBundle", "Bundle Insert (cursor bundle)", keyBtnW);
+        addPerTweakKeyRow("bundleInsertItems", "Bundle Insert (cursor items)", keyBtnW);
+    }
+
+    private void addPerTweakKeyRow(String tweakName, String displayName, int keyBtnW) {
+        boolean isCustom = config.hasCustomKeys(tweakName);
+        int toggleW = scaledButtonWidth(55);
+
+        // Global/Custom toggle button
+        ButtonWidget modeToggle = ButtonWidget.builder(
+                Text.literal(isCustom ? "\u00a7eCustom" : "Global"),
+                button -> {
+                    if (config.hasCustomKeys(tweakName)) {
+                        config.resetToGlobal(tweakName);
+                    } else {
+                        config.initCustomFromGlobal(tweakName);
+                    }
+                    rebuildEntryList();
+                }
+        ).dimensions(0, 0, toggleW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new TweakKeyModeEntry(displayName, modeToggle));
+
+        if (isCustom) {
+            // Show the two custom key buttons
+            ButtonWidget ab1Btn = ButtonWidget.builder(
+                    Text.literal(InvTweaksConfig.getKeyName(config.getEffectiveAllBut1Key(tweakName))),
+                    button -> startCapture("tweak_ab1_" + tweakName, button)
+            ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+
+            ButtonWidget o1Btn = ButtonWidget.builder(
+                    Text.literal(InvTweaksConfig.getKeyName(config.getEffectiveOnly1Key(tweakName))),
+                    button -> startCapture("tweak_o1_" + tweakName, button)
+            ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+
+            tweakKeyButtons.add(new TweakKeyButtons(tweakName, ab1Btn, o1Btn));
+            entryList.addConfigEntry(new TweakKeyPairEntry("  All But 1:", "  Only 1:", YELLOW, AQUA, ab1Btn, o1Btn));
+        } else {
+            entryList.addConfigEntry(new InfoTextEntry("  Using global keys (" +
+                    InvTweaksConfig.getKeyName(config.allBut1Key) + " / " +
+                    InvTweaksConfig.getKeyName(config.only1Key) + ")", DARK_GRAY));
+        }
+    }
+
+    // ---- Tweak toggle section ----
+
+    private void addTweakEntries(int toggleW) {
+        entryList.addConfigEntry(new SectionHeaderEntry("\u00a7l--- Feature Toggles ---"));
+
+        entryList.addConfigEntry(new FeatureEntry("Click Pickup", toggleW,
+                () -> config.enableClickPickup, v -> config.enableClickPickup = v));
+        entryList.addConfigEntry(new FeatureEntry("Shift+Click Transfer", toggleW,
+                () -> config.enableShiftClickTransfer, v -> config.enableShiftClickTransfer = v));
+        entryList.addConfigEntry(new FeatureEntry("Bundle Extract", toggleW,
+                () -> config.enableBundleExtract, v -> config.enableBundleExtract = v));
+        entryList.addConfigEntry(new FeatureEntry("Bundle Insert (picking up with bundle)", toggleW,
+                () -> config.enableBundleInsertCursorBundle, v -> config.enableBundleInsertCursorBundle = v));
+        entryList.addConfigEntry(new FeatureEntry("Bundle Insert (placing into bundle)", toggleW,
+                () -> config.enableBundleInsertCursorItems, v -> config.enableBundleInsertCursorItems = v));
+    }
+
+    // ---- Debug section ----
+
+    private void addDebugEntries(int toggleW) {
+        entryList.addConfigEntry(new DebugEntry("Debug Logging", toggleW,
+                () -> config.enableDebugLogging, v -> config.enableDebugLogging = v));
+    }
+
+    // ========== Key capture ==========
+
+    private void startCapture(String captureId, ButtonWidget button) {
+        capturingKey = captureId;
+        capturingButton = button;
+        button.setMessage(Text.literal("> Press a key <"));
     }
 
     @Override
@@ -125,47 +312,85 @@ public class InvTweaksConfigScreen extends Screen {
                 cancelCapture();
                 return true;
             }
-            if (capturingKey.equals("allbut1")) {
-                config.allBut1Key = keyCode;
-                allBut1KeyBtn.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
-            } else if (capturingKey.equals("only1")) {
-                config.only1Key = keyCode;
-                only1KeyBtn.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
-            } else if (capturingKey.equals("openconfig")) {
-                // Update the Fabric KeyBinding directly
-                KeyBinding configKey = InvTweaksClient.openConfigKey;
-                if (configKey != null) {
-                    configKey.setBoundKey(InputUtil.Type.KEYSYM.createFromCode(keyCode));
-                    KeyBinding.updateKeysByCode();
-                }
-                openConfigKeyBtn.setMessage(Text.literal(
-                        configKey != null ? configKey.getBoundKeyLocalizedText().getString() : InvTweaksConfig.getKeyName(keyCode)));
-            }
-            capturingKey = null;
+            applyCapture(keyCode);
             return true;
         }
         return super.keyPressed(input);
     }
 
-    private void cancelCapture() {
-        if (capturingKey != null) {
-            if (capturingKey.equals("allbut1")) {
-                allBut1KeyBtn.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.allBut1Key)));
-            } else if (capturingKey.equals("only1")) {
-                only1KeyBtn.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.only1Key)));
-            } else if (capturingKey.equals("openconfig")) {
-                KeyBinding configKey = InvTweaksClient.openConfigKey;
-                openConfigKeyBtn.setMessage(Text.literal(
-                        configKey != null ? configKey.getBoundKeyLocalizedText().getString() : "?"));
+    private void applyCapture(int keyCode) {
+        if (capturingKey == null) return;
+
+        if (capturingKey.equals("global_allbut1")) {
+            config.allBut1Key = keyCode;
+            globalAllBut1KeyBtn.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+        } else if (capturingKey.equals("global_only1")) {
+            config.only1Key = keyCode;
+            globalOnly1KeyBtn.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+        } else if (capturingKey.equals("openconfig")) {
+            KeyBinding configKey = InvTweaksClient.openConfigKey;
+            if (configKey != null) {
+                configKey.setBoundKey(InputUtil.Type.KEYSYM.createFromCode(keyCode));
+                KeyBinding.updateKeysByCode();
             }
-            capturingKey = null;
+            openConfigKeyBtn.setMessage(Text.literal(
+                    configKey != null ? configKey.getBoundKeyLocalizedText().getString() : InvTweaksConfig.getKeyName(keyCode)));
+        } else if (capturingKey.startsWith("tweak_ab1_")) {
+            String tweakName = capturingKey.substring("tweak_ab1_".length());
+            config.setPerTweakAllBut1Key(tweakName, keyCode);
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
+        } else if (capturingKey.startsWith("tweak_o1_")) {
+            String tweakName = capturingKey.substring("tweak_o1_".length());
+            config.setPerTweakOnly1Key(tweakName, keyCode);
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
         }
+
+        capturingKey = null;
+        capturingButton = null;
     }
+
+    private void cancelCapture() {
+        if (capturingKey == null) return;
+
+        // Restore button text to current value
+        if (capturingKey.equals("global_allbut1")) {
+            globalAllBut1KeyBtn.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.allBut1Key)));
+        } else if (capturingKey.equals("global_only1")) {
+            globalOnly1KeyBtn.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.only1Key)));
+        } else if (capturingKey.equals("openconfig")) {
+            KeyBinding configKey = InvTweaksClient.openConfigKey;
+            openConfigKeyBtn.setMessage(Text.literal(
+                    configKey != null ? configKey.getBoundKeyLocalizedText().getString() : "?"));
+        } else if (capturingKey.startsWith("tweak_ab1_") || capturingKey.startsWith("tweak_o1_")) {
+            // Restore from config
+            String tweakName;
+            int currentKey;
+            if (capturingKey.startsWith("tweak_ab1_")) {
+                tweakName = capturingKey.substring("tweak_ab1_".length());
+                currentKey = config.getEffectiveAllBut1Key(tweakName);
+            } else {
+                tweakName = capturingKey.substring("tweak_o1_".length());
+                currentKey = config.getEffectiveOnly1Key(tweakName);
+            }
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(currentKey)));
+            }
+        }
+
+        capturingKey = null;
+        capturingButton = null;
+    }
+
+    // ========== Render ==========
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 12, WHITE);
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 10, WHITE);
     }
 
     @Override
@@ -174,32 +399,57 @@ public class InvTweaksConfigScreen extends Screen {
         if (client != null) client.setScreen(parent);
     }
 
-    // ========== Scrollable list ==========
+    // ========== Scrollable list with responsive sizing ==========
 
     private class ConfigEntryList extends ElementListWidget<ConfigEntry> {
         public ConfigEntryList(MinecraftClient client, int width, int height, int y, int itemHeight) {
             super(client, width, height, y, itemHeight);
         }
 
-        // Use a distinct name to avoid overriding the int-returning addEntry
         public void addConfigEntry(ConfigEntry entry) {
             super.addEntry(entry);
         }
 
+        public void clearEntries() {
+            super.children().clear();
+        }
+
         @Override
         public int getRowWidth() {
-            return Math.min(400, this.width - 40);
+            return rowWidth;
         }
 
         @Override
         protected int getScrollbarX() {
-            return this.width / 2 + 210;
+            return (InvTweaksConfigScreen.this.width + rowWidth) / 2 + 10;
         }
     }
 
     // ========== Entry base ==========
 
     private abstract static class ConfigEntry extends ElementListWidget.Entry<ConfigEntry> {
+    }
+
+    // ========== Section header (divider text) ==========
+
+    private class SectionHeaderEntry extends ConfigEntry {
+        private final String text;
+
+        SectionHeaderEntry(String text) {
+            this.text = text;
+        }
+
+        @Override
+        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+            int x = getX();
+            int y = getY();
+            context.drawTextWithShadow(textRenderer, Text.literal(text), x, y + 6, ORANGE);
+        }
+
+        @Override
+        public List<? extends Element> children() { return List.of(); }
+        @Override
+        public List<? extends Selectable> selectableChildren() { return List.of(); }
     }
 
     // ========== Key binding row ==========
@@ -224,24 +474,23 @@ public class InvTweaksConfigScreen extends Screen {
             int w = getWidth();
             context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, labelColor);
             int descX = x + textRenderer.getWidth(label) + 6;
-            context.drawTextWithShadow(textRenderer, Text.literal(desc), descX, y + 6, DARK_GRAY);
-            button.setX(x + w - button.getWidth());
+            // Only draw desc if it fits before the button
+            int btnLeft = x + w - button.getWidth();
+            if (descX + textRenderer.getWidth(desc) < btnLeft - 4) {
+                context.drawTextWithShadow(textRenderer, Text.literal(desc), descX, y + 6, DARK_GRAY);
+            }
+            button.setX(btnLeft);
             button.setY(y);
             button.render(context, mouseX, mouseY, delta);
         }
 
         @Override
-        public List<? extends Element> children() {
-            return List.of(button);
-        }
-
+        public List<? extends Element> children() { return List.of(button); }
         @Override
-        public List<? extends Selectable> selectableChildren() {
-            return List.of(button);
-        }
+        public List<? extends Selectable> selectableChildren() { return List.of(button); }
     }
 
-    // ========== Column header ==========
+    // ========== Column header (Enabled / Keys) ==========
 
     private class HeaderEntry extends ConfigEntry {
         private final String col1;
@@ -257,21 +506,17 @@ public class InvTweaksConfigScreen extends Screen {
             int x = getX();
             int y = getY();
             int w = getWidth();
-            int toggleX = x + w / 2 + 10;
-            int flipX = x + w / 2 + 56;
+            // Position columns relative to row width
+            int toggleX = x + (int)(w * 0.55);
+            int flipX = x + (int)(w * 0.70);
             context.drawTextWithShadow(textRenderer, Text.literal(col1), toggleX - 2, y + 8, GRAY);
             context.drawTextWithShadow(textRenderer, Text.literal(col2), flipX + 10, y + 8, GRAY);
         }
 
         @Override
-        public List<? extends Element> children() {
-            return List.of();
-        }
-
+        public List<? extends Element> children() { return List.of(); }
         @Override
-        public List<? extends Selectable> selectableChildren() {
-            return List.of();
-        }
+        public List<? extends Selectable> selectableChildren() { return List.of(); }
     }
 
     // ========== Feature toggle row ==========
@@ -279,11 +524,9 @@ public class InvTweaksConfigScreen extends Screen {
     private class FeatureEntry extends ConfigEntry {
         private final String label;
         private final ButtonWidget toggleBtn;
-        private final ButtonWidget flipBtn;
 
-        FeatureEntry(String label, int toggleW, int flipW,
-                     Supplier<Boolean> enabledGet, Consumer<Boolean> enabledSet,
-                     Supplier<Boolean> flipGet, Consumer<Boolean> flipSet) {
+        FeatureEntry(String label, int toggleW,
+                     Supplier<Boolean> enabledGet, Consumer<Boolean> enabledSet) {
             this.label = label;
             this.toggleBtn = ButtonWidget.builder(
                     Text.literal(enabledGet.get() ? "\u00a7aON" : "\u00a7cOFF"),
@@ -291,12 +534,6 @@ public class InvTweaksConfigScreen extends Screen {
                         enabledSet.accept(!enabledGet.get());
                         button.setMessage(Text.literal(enabledGet.get() ? "\u00a7aON" : "\u00a7cOFF"));
                     }).dimensions(0, 0, toggleW, BUTTON_HEIGHT).build();
-            this.flipBtn = ButtonWidget.builder(
-                    Text.literal(flipGet.get() ? "\u00a7eFlipped" : "Default"),
-                    button -> {
-                        flipSet.accept(!flipGet.get());
-                        button.setMessage(Text.literal(flipGet.get() ? "\u00a7eFlipped" : "Default"));
-                    }).dimensions(0, 0, flipW, BUTTON_HEIGHT).build();
         }
 
         @Override
@@ -305,25 +542,16 @@ public class InvTweaksConfigScreen extends Screen {
             int y = getY();
             int w = getWidth();
             context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, WHITE);
-            int toggleX = x + w / 2 + 10;
-            int flipX = x + w / 2 + 56;
+            int toggleX = x + w - toggleBtn.getWidth();
             toggleBtn.setX(toggleX);
             toggleBtn.setY(y);
             toggleBtn.render(context, mouseX, mouseY, delta);
-            flipBtn.setX(flipX);
-            flipBtn.setY(y);
-            flipBtn.render(context, mouseX, mouseY, delta);
         }
 
         @Override
-        public List<? extends Element> children() {
-            return List.of(toggleBtn, flipBtn);
-        }
-
+        public List<? extends Element> children() { return List.of(toggleBtn); }
         @Override
-        public List<? extends Selectable> selectableChildren() {
-            return List.of(toggleBtn, flipBtn);
-        }
+        public List<? extends Selectable> selectableChildren() { return List.of(toggleBtn); }
     }
 
     // ========== Debug toggle row ==========
@@ -348,20 +576,113 @@ public class InvTweaksConfigScreen extends Screen {
             int y = getY();
             int w = getWidth();
             context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, GRAY);
-            int toggleX = x + w / 2 + 10;
+            int toggleX = x + (int)(w * 0.55);
             toggleBtn.setX(toggleX);
             toggleBtn.setY(y);
             toggleBtn.render(context, mouseX, mouseY, delta);
         }
 
         @Override
-        public List<? extends Element> children() {
-            return List.of(toggleBtn);
+        public List<? extends Element> children() { return List.of(toggleBtn); }
+        @Override
+        public List<? extends Selectable> selectableChildren() { return List.of(toggleBtn); }
+    }
+
+    // ========== Per-tweak key mode toggle row (Global / Custom) ==========
+
+    private class TweakKeyModeEntry extends ConfigEntry {
+        private final String label;
+        private final ButtonWidget modeBtn;
+
+        TweakKeyModeEntry(String label, ButtonWidget modeBtn) {
+            this.label = label;
+            this.modeBtn = modeBtn;
         }
 
         @Override
-        public List<? extends Selectable> selectableChildren() {
-            return List.of(toggleBtn);
+        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+            int x = getX();
+            int y = getY();
+            int w = getWidth();
+            context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, WHITE);
+            modeBtn.setX(x + w - modeBtn.getWidth());
+            modeBtn.setY(y);
+            modeBtn.render(context, mouseX, mouseY, delta);
         }
+
+        @Override
+        public List<? extends Element> children() { return List.of(modeBtn); }
+        @Override
+        public List<? extends Selectable> selectableChildren() { return List.of(modeBtn); }
+    }
+
+    // ========== Per-tweak key pair row (two key buttons on one row) ==========
+
+    private class TweakKeyPairEntry extends ConfigEntry {
+        private final String label1;
+        private final String label2;
+        private final int color1;
+        private final int color2;
+        private final ButtonWidget btn1;
+        private final ButtonWidget btn2;
+
+        TweakKeyPairEntry(String label1, String label2, int color1, int color2,
+                          ButtonWidget btn1, ButtonWidget btn2) {
+            this.label1 = label1;
+            this.label2 = label2;
+            this.color1 = color1;
+            this.color2 = color2;
+            this.btn1 = btn1;
+            this.btn2 = btn2;
+        }
+
+        @Override
+        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+            int x = getX();
+            int y = getY();
+            int w = getWidth();
+            // Split the row: left half for allBut1, right half for only1
+            int halfW = w / 2;
+            // Label + button for allBut1
+            context.drawTextWithShadow(textRenderer, Text.literal(label1), x, y + 6, color1);
+            int label1W = textRenderer.getWidth(label1);
+            btn1.setX(x + label1W + 6);
+            btn1.setY(y);
+            btn1.render(context, mouseX, mouseY, delta);
+            // Label + button for only1
+            int rightX = x + halfW + 10;
+            context.drawTextWithShadow(textRenderer, Text.literal(label2), rightX, y + 6, color2);
+            int label2W = textRenderer.getWidth(label2);
+            btn2.setX(rightX + label2W + 6);
+            btn2.setY(y);
+            btn2.render(context, mouseX, mouseY, delta);
+        }
+
+        @Override
+        public List<? extends Element> children() { return List.of(btn1, btn2); }
+        @Override
+        public List<? extends Selectable> selectableChildren() { return List.of(btn1, btn2); }
+    }
+
+    // ========== Info text row (non-interactive) ==========
+
+    private class InfoTextEntry extends ConfigEntry {
+        private final String text;
+        private final int color;
+
+        InfoTextEntry(String text, int color) {
+            this.text = text;
+            this.color = color;
+        }
+
+        @Override
+        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+            context.drawTextWithShadow(textRenderer, Text.literal(text), getX(), getY() + 6, color);
+        }
+
+        @Override
+        public List<? extends Element> children() { return List.of(); }
+        @Override
+        public List<? extends Selectable> selectableChildren() { return List.of(); }
     }
 }
