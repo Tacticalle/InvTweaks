@@ -219,6 +219,21 @@ public class InvTweaksConfigScreen extends Screen {
                 button -> startCapture("openconfig", button)
         ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
         entryList.addConfigEntry(new KeyBindEntry("Open Config key:", "(open this screen)", GRAY, openConfigKeyBtn));
+
+        // ---- Throwing Hotkeys ----
+        entryList.addConfigEntry(new SectionHeaderEntry("\u00a7l--- Throwing ---"));
+
+        ButtonWidget throwAB1KeyBtn = ButtonWidget.builder(
+                Text.literal(InvTweaksConfig.getKeyName(config.throwAllBut1Key)),
+                button -> startCapture("throwAllBut1Key", button)
+        ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new KeyBindEntry("Throw All But 1:", "(modifier + Q)", YELLOW, throwAB1KeyBtn));
+
+        ButtonWidget throwHalfKeyBtn = ButtonWidget.builder(
+                Text.literal(InvTweaksConfig.getKeyName(config.throwHalfKey)),
+                button -> startCapture("throwHalfKey", button)
+        ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new KeyBindEntry("Throw Half:", "(modifier + Q)", AQUA, throwHalfKeyBtn));
     }
 
     // ---- Per-tweak key overrides ----
@@ -231,6 +246,7 @@ public class InvTweaksConfigScreen extends Screen {
         addPerTweakKeyRow("bundleExtract", "Bundle Extract", keyBtnW);
         addPerTweakKeyRow("bundleInsertBundle", "Bundle Insert (cursor bundle)", keyBtnW);
         addPerTweakKeyRow("bundleInsertItems", "Bundle Insert (cursor items)", keyBtnW);
+        addPerTweakKeyRow("hotbarModifiers", "Hotbar Button Modifiers", keyBtnW);
     }
 
     private void addPerTweakKeyRow(String tweakName, String displayName, int keyBtnW) {
@@ -287,6 +303,10 @@ public class InvTweaksConfigScreen extends Screen {
                 () -> config.enableBundleInsertCursorBundle, v -> config.enableBundleInsertCursorBundle = v));
         entryList.addConfigEntry(new FeatureEntry("Bundle Insert (placing into bundle)", toggleW,
                 () -> config.enableBundleInsertCursorItems, v -> config.enableBundleInsertCursorItems = v));
+        entryList.addConfigEntry(new FeatureEntry("Throw Half", toggleW,
+                () -> config.enableThrowHalf, v -> config.enableThrowHalf = v));
+        entryList.addConfigEntry(new FeatureEntry("Hotbar Button Modifiers", toggleW,
+                () -> config.enableHotbarModifiers, v -> config.enableHotbarModifiers = v));
     }
 
     // ---- Debug section ----
@@ -335,6 +355,21 @@ public class InvTweaksConfigScreen extends Screen {
             }
             openConfigKeyBtn.setMessage(Text.literal(
                     configKey != null ? configKey.getBoundKeyLocalizedText().getString() : InvTweaksConfig.getKeyName(keyCode)));
+        } else if (capturingKey.equals("throwAllBut1Key")) {
+            config.throwAllBut1Key = keyCode;
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
+        } else if (capturingKey.equals("throwAllBut1Key")) {
+            config.throwAllBut1Key = keyCode;
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
+        } else if (capturingKey.equals("throwHalfKey")) {
+            config.throwHalfKey = keyCode;
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
         } else if (capturingKey.startsWith("tweak_ab1_")) {
             String tweakName = capturingKey.substring("tweak_ab1_".length());
             config.setPerTweakAllBut1Key(tweakName, keyCode);
@@ -365,6 +400,18 @@ public class InvTweaksConfigScreen extends Screen {
             KeyBinding configKey = InvTweaksClient.openConfigKey;
             openConfigKeyBtn.setMessage(Text.literal(
                     configKey != null ? configKey.getBoundKeyLocalizedText().getString() : "?"));
+        } else if (capturingKey.equals("throwAllBut1Key")) {
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.throwAllBut1Key)));
+            }
+        } else if (capturingKey.equals("throwAllBut1Key")) {
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.throwAllBut1Key)));
+            }
+        } else if (capturingKey.equals("throwHalfKey")) {
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.throwHalfKey)));
+            }
         } else if (capturingKey.startsWith("tweak_ab1_") || capturingKey.startsWith("tweak_o1_")) {
             // Restore from config
             String tweakName;

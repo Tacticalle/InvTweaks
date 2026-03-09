@@ -79,6 +79,140 @@ public abstract class HandledScreenMixin {
             }
         }
 
+        // Throwing tweaks: modifier + Q (THROW action) in GUI
+        if (actionType == SlotActionType.THROW && config.enableThrowHalf) {
+            ItemStack slotStack = slot.getStack();
+            if (!slotStack.isEmpty() && slotStack.getCount() > 1) {
+                boolean throwHalf = config.isThrowHalfKeyPressed();
+                boolean throwAB1 = config.isThrowAllBut1KeyPressed();
+
+                if (throwHalf || throwAB1) {
+                    ci.cancel();
+                    var mc = MinecraftClient.getInstance();
+                    var im = mc.interactionManager;
+                    var player = mc.player;
+                    if (im == null || player == null) return;
+
+                    int count = slotStack.getCount();
+
+                    if (throwAB1) {
+                        // Throw all but 1: pick up stack, right-click 1 into source slot, throw cursor
+                        // Note: right-click places HALF, not 1. So we use a temp slot.
+                        if (config.enableDebugLogging) LOGGER.info("[IT:THROW] allbut1 | slot={} | count={}", slotId, count);
+                        int tempSlot = it_findEmptyPlayerSlot(slotId);
+                        if (tempSlot < 0) return; // no temp slot available
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        // Place 1 in temp slot
+                        im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
+                        // Throw remaining from cursor
+                        im.clickSlot(handler.syncId, -999, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        // Move the 1 from temp back to source
+                        im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    } else {
+                        // Throw half: right-click to pick up half, then throw cursor
+                        if (config.enableDebugLogging) LOGGER.info("[IT:THROW] half | slot={} | count={} | dropping={}", slotId, count, count / 2);
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
+                        im.clickSlot(handler.syncId, -999, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    }
+                    return;
+                }
+            } else if (!slotStack.isEmpty() && slotStack.getCount() == 1) {
+                // Stack of 1: if either throw modifier is held, do nothing
+                if (config.isThrowHalfKeyPressed() || config.isThrowAllBut1KeyPressed()) {
+                    ci.cancel();
+                    return;
+                }
+            }
+        }
+
+        // Hotbar Button Modifiers: modifier + number key (SWAP action) in GUI
+        if (actionType == SlotActionType.SWAP && config.enableHotbarModifiers) {
+            String hotbarMode = config.getActiveMode("hotbarModifiers");
+            if (hotbarMode != null) {
+                ItemStack sourceStack = slot.getStack();
+                if (sourceStack.isEmpty()) return; // nothing to move
+                if (sourceStack.getCount() <= 1) return; // only 1 item, just do vanilla swap
+
+                ci.cancel();
+                var mc = MinecraftClient.getInstance();
+                var im = mc.interactionManager;
+                var player = mc.player;
+                if (im == null || player == null) return;
+
+                int hotbarIndex = button; // button = 0-8 for hotbar slots
+                int hotbarSlotId = it_findHotbarSlotId(hotbarIndex);
+                if (hotbarSlotId < 0) return;
+
+                if (config.enableDebugLogging) LOGGER.info("IT: hotbarModifiers - mode={}, sourceSlot={}, hotbarSlot={}, hotbarIndex={}", hotbarMode, slotId, hotbarSlotId, hotbarIndex);
+
+                ItemStack hotbarStack = handler.slots.get(hotbarSlotId).getStack();
+
+                if (hotbarMode.equals("allbut1")) {
+                    // Move all-but-1 from source to hotbar slot
+                    if (hotbarStack.isEmpty()) {
+                        // Empty hotbar slot: pick up stack, right-click 1 back to source, left-click hotbar
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
+                        im.clickSlot(handler.syncId, hotbarSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    } else if (hotbarStack.getItem() == sourceStack.getItem()
+                            && ItemStack.areItemsAndComponentsEqual(hotbarStack, sourceStack)) {
+                        // Same item in hotbar: pick up source, right-click 1 back, left-click hotbar to stack
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
+                        im.clickSlot(handler.syncId, hotbarSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        // If there's overflow on cursor (hotbar full), put it back in source
+                        if (!handler.getCursorStack().isEmpty()) {
+                            im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        }
+                    } else {
+                        // Different item in hotbar: swap hotbar item to source, then place N-1 in hotbar
+                        // Pick up source stack
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        // Place into hotbar (swaps: cursor gets hotbar item, hotbar gets source)
+                        im.clickSlot(handler.syncId, hotbarSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        // Cursor now has the old hotbar item. Place it in source.
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        // Now source has old hotbar item, hotbar has full source stack.
+                        // We need to pull 1 back from hotbar to source... but source is occupied.
+                        // Use a temp slot approach:
+                        int tempSlot = it_findEmptyPlayerSlot2(slotId, hotbarSlotId);
+                        if (tempSlot >= 0) {
+                            // Move old hotbar item from source to temp
+                            im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                            im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                            // Pick up from hotbar, right-click 1 to source, put rest back in hotbar
+                            im.clickSlot(handler.syncId, hotbarSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                            im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
+                            im.clickSlot(handler.syncId, hotbarSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                            // Move old hotbar item back from temp to source... but source has 1 item
+                            // Actually, let's swap: pick up temp, left-click source (swap 1 item with old hotbar item)
+                            // This gets complex. Simpler: just leave old hotbar item in temp.
+                            // The user gets: 1 of source item in source, N-1 in hotbar, old hotbar item in temp.
+                            // That's acceptable behavior.
+                        }
+                    }
+                } else {
+                    // "only1" mode: move exactly 1 from source to hotbar slot
+                    if (hotbarStack.isEmpty()) {
+                        // Empty hotbar: pick up source, right-click 1 into hotbar, put rest back
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        im.clickSlot(handler.syncId, hotbarSlotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    } else if (hotbarStack.getItem() == sourceStack.getItem()
+                            && ItemStack.areItemsAndComponentsEqual(hotbarStack, sourceStack)
+                            && hotbarStack.getCount() < hotbarStack.getMaxCount()) {
+                        // Same item, room to stack: pick up source, right-click 1 into hotbar, put rest back
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        im.clickSlot(handler.syncId, hotbarSlotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    }
+                    // Different item or full stack: do nothing (don't swap for only1 with incompatible)
+                }
+                return;
+            }
+        }
+
         // Shift+Click transfer
         if (shiftPressed && actionType == SlotActionType.QUICK_MOVE && config.enableShiftClickTransfer) {
             String mode = config.getActiveMode("shiftClick");
@@ -126,9 +260,14 @@ public abstract class HandledScreenMixin {
                 }
 
                 // "allbut1" mode: take snapshot and let vanilla proceed, fix in RETURN
+                ItemStack sourceStack = slot.getStack();
+                // If only 1 item, allbut1 is meaningless — let vanilla handle it normally
+                if (sourceStack.getCount() <= 1) {
+                    it_shiftClickMode = null;
+                    return;
+                }
                 it_shiftClickMode = mode;
                 it_shiftClickSlotId = slotId;
-                ItemStack sourceStack = slot.getStack();
                 it_preClickItem = sourceStack.isEmpty() ? null : sourceStack.getItem();
                 it_preClickCount = sourceStack.getCount();
                 it_preClickSnapshot = new HashMap<>();
@@ -517,6 +656,24 @@ public abstract class HandledScreenMixin {
     }
 
     // ========== UTILITY METHODS ==========
+
+    @Unique
+    private int it_findHotbarSlotId(int hotbarIndex) {
+        // Find the screen handler slot ID that corresponds to a given hotbar index (0-8).
+        // In most screens, hotbar slots are the last 9 slots and have inventory index 0-8.
+        // In InventoryScreen, hotbar slots are IDs 36-44.
+        if (it_isPlayerOnlyScreen()) {
+            return 36 + hotbarIndex;
+        }
+        // For container screens, search for the slot with the matching hotbar inventory index
+        for (int i = 0; i < handler.slots.size(); i++) {
+            Slot s = handler.slots.get(i);
+            if (s.inventory instanceof net.minecraft.entity.player.PlayerInventory && s.getIndex() == hotbarIndex) {
+                return i;
+            }
+        }
+        return -1;
+    }
 
     @Unique
     private int it_findEmptyPlayerSlot(int excludeSlotId) {
