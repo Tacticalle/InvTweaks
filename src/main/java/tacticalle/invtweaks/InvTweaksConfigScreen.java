@@ -234,6 +234,15 @@ public class InvTweaksConfigScreen extends Screen {
                 button -> startCapture("throwHalfKey", button)
         ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
         entryList.addConfigEntry(new KeyBindEntry("Throw Half:", "(modifier + Q)", AQUA, throwHalfKeyBtn));
+
+        // ---- Fill Existing ----
+        entryList.addConfigEntry(new SectionHeaderEntry("\u00a7l--- Fill Existing Stacks ---"));
+
+        ButtonWidget fillExistingKeyBtn = ButtonWidget.builder(
+                Text.literal(InvTweaksConfig.getKeyName(config.fillExistingKey)),
+                button -> startCapture("fillExistingKey", button)
+        ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new KeyBindEntry("Fill Existing:", "(modifier + shift-click)", GREEN, fillExistingKeyBtn));
     }
 
     // ---- Per-tweak key overrides ----
@@ -247,6 +256,7 @@ public class InvTweaksConfigScreen extends Screen {
         addPerTweakKeyRow("bundleInsertBundle", "Bundle Insert (cursor bundle)", keyBtnW);
         addPerTweakKeyRow("bundleInsertItems", "Bundle Insert (cursor items)", keyBtnW);
         addPerTweakKeyRow("hotbarModifiers", "Hotbar Button Modifiers", keyBtnW);
+        addPerTweakKeyRow("fillExisting", "Fill Existing Stacks", keyBtnW);
     }
 
     private void addPerTweakKeyRow(String tweakName, String displayName, int keyBtnW) {
@@ -307,6 +317,8 @@ public class InvTweaksConfigScreen extends Screen {
                 () -> config.enableThrowHalf, v -> config.enableThrowHalf = v));
         entryList.addConfigEntry(new FeatureEntry("Hotbar Button Modifiers", toggleW,
                 () -> config.enableHotbarModifiers, v -> config.enableHotbarModifiers = v));
+        entryList.addConfigEntry(new FeatureEntry("Fill Existing Stacks", toggleW,
+                () -> config.enableFillExisting, v -> config.enableFillExisting = v));
     }
 
     // ---- Debug section ----
@@ -355,8 +367,18 @@ public class InvTweaksConfigScreen extends Screen {
             }
             openConfigKeyBtn.setMessage(Text.literal(
                     configKey != null ? configKey.getBoundKeyLocalizedText().getString() : InvTweaksConfig.getKeyName(keyCode)));
+        } else if (capturingKey.equals("fillExistingKey")) {
+            config.fillExistingKey = keyCode;
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
         } else if (capturingKey.equals("throwAllBut1Key")) {
             config.throwAllBut1Key = keyCode;
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
+        } else if (capturingKey.equals("fillExistingKey")) {
+            config.fillExistingKey = keyCode;
             if (capturingButton != null) {
                 capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
             }
@@ -400,9 +422,17 @@ public class InvTweaksConfigScreen extends Screen {
             KeyBinding configKey = InvTweaksClient.openConfigKey;
             openConfigKeyBtn.setMessage(Text.literal(
                     configKey != null ? configKey.getBoundKeyLocalizedText().getString() : "?"));
+        } else if (capturingKey.equals("fillExistingKey")) {
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.fillExistingKey)));
+            }
         } else if (capturingKey.equals("throwAllBut1Key")) {
             if (capturingButton != null) {
                 capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.throwAllBut1Key)));
+            }
+        } else if (capturingKey.equals("fillExistingKey")) {
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.fillExistingKey)));
             }
         } else if (capturingKey.equals("throwAllBut1Key")) {
             if (capturingButton != null) {

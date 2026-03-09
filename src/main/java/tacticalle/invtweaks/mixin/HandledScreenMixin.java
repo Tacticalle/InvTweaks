@@ -58,15 +58,15 @@ public abstract class HandledScreenMixin {
         boolean shiftPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS ||
                               GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
 
-        // Debug logging
+        // Comprehensive HEAD debug logging
         boolean anyModDown = config.isAnyModifierPressed();
         if (config.enableDebugLogging && anyModDown) {
             String screenType = ((Object) this).getClass().getSimpleName();
-            LOGGER.info("IT HEAD: screen={}, slot={}, button={}, action={}, globalAllBut1Key={}({}), globalOnly1Key={}({}), shift={}",
+            InvTweaksConfig.debugLog("HEAD", "beforeOnMouseClick | screen=%s | slot=%d | button=%d | action=%s | allBut1=%s(%s) | only1=%s(%s) | shift=%s | fillExisting=%s",
                 screenType, slotId, button, actionType,
                 InvTweaksConfig.getKeyName(config.allBut1Key), InvTweaksConfig.isKeyPressed(config.allBut1Key),
                 InvTweaksConfig.getKeyName(config.only1Key), InvTweaksConfig.isKeyPressed(config.only1Key),
-                shiftPressed);
+                shiftPressed, config.isFillExistingActive());
         }
 
         // Block vanilla PICKUP_ALL (double-click gather) when modifier keys are held.
@@ -98,7 +98,7 @@ public abstract class HandledScreenMixin {
                     if (throwAB1) {
                         // Throw all but 1: pick up stack, right-click 1 into source slot, throw cursor
                         // Note: right-click places HALF, not 1. So we use a temp slot.
-                        if (config.enableDebugLogging) LOGGER.info("[IT:THROW] allbut1 | slot={} | count={}", slotId, count);
+                        InvTweaksConfig.debugLog("THROW-HALF", "allbut1 | slot=%d | count=%d", slotId, count);
                         int tempSlot = it_findEmptyPlayerSlot(slotId);
                         if (tempSlot < 0) return; // no temp slot available
                         im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
@@ -111,7 +111,7 @@ public abstract class HandledScreenMixin {
                         im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                     } else {
                         // Throw half: right-click to pick up half, then throw cursor
-                        if (config.enableDebugLogging) LOGGER.info("[IT:THROW] half | slot={} | count={} | dropping={}", slotId, count, count / 2);
+                        InvTweaksConfig.debugLog("THROW-HALF", "half | slot=%d | count=%d | dropping=%d", slotId, count, count / 2);
                         im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
                         im.clickSlot(handler.syncId, -999, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                     }
@@ -144,7 +144,7 @@ public abstract class HandledScreenMixin {
                 int hotbarSlotId = it_findHotbarSlotId(hotbarIndex);
                 if (hotbarSlotId < 0) return;
 
-                if (config.enableDebugLogging) LOGGER.info("IT: hotbarModifiers - mode={}, sourceSlot={}, hotbarSlot={}, hotbarIndex={}", hotbarMode, slotId, hotbarSlotId, hotbarIndex);
+                if (config.enableDebugLogging) InvTweaksConfig.debugLog("HOTBAR", "mode=%s | sourceSlot=%d | hotbarSlot=%d | hotbarIndex=%d", hotbarMode, slotId, hotbarSlotId, hotbarIndex);
 
                 ItemStack hotbarStack = handler.slots.get(hotbarSlotId).getStack();
 
@@ -213,6 +213,69 @@ public abstract class HandledScreenMixin {
             }
         }
 
+        // Fill Existing Stacks: both modifier keys held + shift + click
+        if (shiftPressed && actionType == SlotActionType.QUICK_MOVE && config.enableFillExisting
+                && config.isFillExistingActive()) {
+            ci.cancel();
+            ItemStack sourceStack = slot.getStack();
+            if (sourceStack.isEmpty()) return;
+
+            var mc = MinecraftClient.getInstance();
+            var im = mc.interactionManager;
+            var player = mc.player;
+            if (im == null || player == null) return;
+
+            Item itemType = sourceStack.getItem();
+            int sourceCount = sourceStack.getCount();
+            boolean isPlayerOnlyScreen = it_isPlayerOnlyScreen();
+
+            // Find all partial stacks of the same item on the other side
+            java.util.List<int[]> partialStacks = new java.util.ArrayList<>();
+            for (int i = 0; i < handler.slots.size(); i++) {
+                if (i == slotId) continue;
+                if (!it_isOtherSide(slotId, i, isPlayerOnlyScreen)) continue;
+                ItemStack destStack = handler.slots.get(i).getStack();
+                if (!destStack.isEmpty() && destStack.getItem() == itemType
+                        && ItemStack.areItemsAndComponentsEqual(destStack, sourceStack)
+                        && destStack.getCount() < destStack.getMaxCount()) {
+                    int space = destStack.getMaxCount() - destStack.getCount();
+                    partialStacks.add(new int[]{i, space});
+                }
+            }
+
+            if (partialStacks.isEmpty()) {
+                InvTweaksConfig.debugLog("FILL", "no partial stacks found | item=%s | slot=%d", itemType, slotId);
+                return;
+            }
+
+            // Sort by slot ID (lowest first) for consistent fill order
+            partialStacks.sort((a, b) -> Integer.compare(a[0], b[0]));
+
+            InvTweaksConfig.debugLog("FILL", "filling | item=%s | sourceSlot=%d | sourceCount=%d | targets=%d",
+                    itemType, slotId, sourceCount, partialStacks.size());
+
+            // Pick up source stack
+            it_debugClickSlot(im, handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player, "FILL");
+
+            // Left-click on each partial stack destination — items merge automatically up to max
+            for (int[] partial : partialStacks) {
+                int destSlotId = partial[0];
+                ItemStack cursor = handler.getCursorStack();
+                if (cursor.isEmpty()) break; // nothing left to distribute
+
+                it_debugClickSlot(im, handler.syncId, destSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player, "FILL");
+            }
+
+            // Put any remainder back in source slot
+            if (!handler.getCursorStack().isEmpty()) {
+                it_debugClickSlot(im, handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player, "FILL");
+            }
+
+            InvTweaksConfig.debugLog("FILL", "result | sourceSlotNow=%d | cursorNow=%d",
+                    slot.getStack().getCount(), handler.getCursorStack().getCount());
+            return;
+        }
+
         // Shift+Click transfer
         if (shiftPressed && actionType == SlotActionType.QUICK_MOVE && config.enableShiftClickTransfer) {
             String mode = config.getActiveMode("shiftClick");
@@ -250,7 +313,7 @@ public abstract class HandledScreenMixin {
                     int destSlot = it_findCompatibleSlotOnOtherSide(sourceStack.getItem(), slotId);
                     if (destSlot < 0) return; // no room
 
-                    if (config.enableDebugLogging) LOGGER.info("IT: only1 shift-click - slot={}, dest={}", slotId, destSlot);
+                    if (config.enableDebugLogging) InvTweaksConfig.debugLog("SHIFT", "only1 mode | slot=%d | dest=%d", slotId, destSlot);
 
                     // Pick up stack, right-click dest (places 1), put rest back
                     im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
@@ -342,11 +405,19 @@ public abstract class HandledScreenMixin {
         boolean shiftPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS ||
                               GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
 
+        // Comprehensive RETURN debug logging
+        if (config.enableDebugLogging && config.isAnyModifierPressed()) {
+            InvTweaksConfig.debugLog("RETURN", "afterOnMouseClick | slot=%d | button=%d | action=%s | shift=%s | cursorStack=%s(%d) | slotStack=%s(%d)",
+                slotId, button, actionType, shiftPressed,
+                slot.getStack().isEmpty() ? "empty" : slot.getStack().getItem().toString(), slot.getStack().getCount(),
+                handler.getCursorStack().isEmpty() ? "empty" : handler.getCursorStack().getItem().toString(), handler.getCursorStack().getCount());
+        }
+
         // Shift+Click Transfer
         if (shiftPressed && actionType == SlotActionType.QUICK_MOVE
                 && it_shiftClickMode != null
                 && slotId == it_shiftClickSlotId) {
-            if (InvTweaksConfig.get().enableDebugLogging) LOGGER.info("IT: handleShiftClick - mode={}, slot={}", it_shiftClickMode, slotId);
+            if (InvTweaksConfig.get().enableDebugLogging) InvTweaksConfig.debugLog("SHIFT", "handleShiftClick | mode=%s | slot=%d", it_shiftClickMode, slotId);
             it_handleShiftClick(slot, slotId, im, player, it_shiftClickMode);
             return;
         }
@@ -415,7 +486,7 @@ public abstract class HandledScreenMixin {
         int cursorCount = cursorStack.getCount();
         if (slot.getStack().getCount() > 0 || cursorCount <= 1) return;
 
-        if (InvTweaksConfig.get().enableDebugLogging) LOGGER.info("IT: handlePickup - mode={}, cursorCount={}", mode, cursorCount);
+        if (InvTweaksConfig.get().enableDebugLogging) InvTweaksConfig.debugLog("PICKUP", "%s mode | cursorCount=%d | slotCount=%d", mode, cursorCount, slot.getStack().getCount());
 
         if (mode.equals("allbut1")) {
             im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
@@ -550,7 +621,7 @@ public abstract class HandledScreenMixin {
         int tempSlot = it_findEmptyPlayerSlot(slotId);
         if (tempSlot < 0) return;
 
-        if (InvTweaksConfig.get().enableDebugLogging) LOGGER.info("IT: Bundle extract ({}) - count={}", mode, cursorStack.getCount());
+        if (InvTweaksConfig.get().enableDebugLogging) InvTweaksConfig.debugLog("BUNDLE-EXT", "%s mode | count=%d", mode, cursorStack.getCount());
 
         if (mode.equals("only1")) {
             im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
@@ -653,6 +724,18 @@ public abstract class HandledScreenMixin {
                 }
             }
         }
+    }
+
+    // ========== DEBUG-WRAPPED CLICK SLOT ==========
+
+    /**
+     * Wrapper for im.clickSlot that logs the synthetic click when debug is enabled.
+     */
+    @Unique
+    private void it_debugClickSlot(ClientPlayerInteractionManager im, int syncId, int slotId, int button,
+            SlotActionType action, net.minecraft.entity.player.PlayerEntity player, String tag) {
+        InvTweaksConfig.debugLog("CLICK", "synthetic | tag=%s | slot=%d | button=%d | action=%s", tag, slotId, button, action);
+        im.clickSlot(syncId, slotId, button, action, player);
     }
 
     // ========== UTILITY METHODS ==========

@@ -33,8 +33,10 @@ public class InvTweaksConfig {
     public boolean enableThrowHalf = true;
     // Throwing modifier keys
     public int throwAllBut1Key = GLFW.GLFW_KEY_G;
-    public int throwHalfKey = GLFW.GLFW_KEY_H;
+    public int throwHalfKey = GLFW.GLFW_KEY_LEFT_ALT;
+    public int fillExistingKey = GLFW.GLFW_KEY_LEFT_ALT;
     public boolean enableHotbarModifiers = true;
+    public boolean enableFillExisting = true;
 
     // Per-tweak modifier key overrides (-1 means "use global default")
     public int clickPickupAllBut1Key = -1;
@@ -51,6 +53,8 @@ public class InvTweaksConfig {
     public int throwHalfOnly1Key = -1;
     public int hotbarModifiersAllBut1Key = -1;
     public int hotbarModifiersOnly1Key = -1;
+    public int fillExistingAllBut1Key = -1;
+    public int fillExistingOnly1Key = -1;
 
     // Debug logging
     public boolean enableDebugLogging = false;
@@ -70,6 +74,7 @@ public class InvTweaksConfig {
             case "bundleInsertItems" -> bundleInsertItemsAllBut1Key;
             case "throwHalf" -> throwHalfAllBut1Key;
             case "hotbarModifiers" -> hotbarModifiersAllBut1Key;
+            case "fillExisting" -> fillExistingAllBut1Key;
             default -> -1;
         };
         return perTweak != -1 ? perTweak : allBut1Key;
@@ -88,6 +93,7 @@ public class InvTweaksConfig {
             case "bundleInsertItems" -> bundleInsertItemsOnly1Key;
             case "throwHalf" -> throwHalfOnly1Key;
             case "hotbarModifiers" -> hotbarModifiersOnly1Key;
+            case "fillExisting" -> fillExistingOnly1Key;
             default -> -1;
         };
         return perTweak != -1 ? perTweak : only1Key;
@@ -105,6 +111,7 @@ public class InvTweaksConfig {
             case "bundleInsertItems" -> bundleInsertItemsAllBut1Key != -1 || bundleInsertItemsOnly1Key != -1;
             case "throwHalf" -> throwHalfAllBut1Key != -1 || throwHalfOnly1Key != -1;
             case "hotbarModifiers" -> hotbarModifiersAllBut1Key != -1 || hotbarModifiersOnly1Key != -1;
+            case "fillExisting" -> fillExistingAllBut1Key != -1 || fillExistingOnly1Key != -1;
             default -> false;
         };
     }
@@ -121,6 +128,7 @@ public class InvTweaksConfig {
             case "bundleInsertItems" -> bundleInsertItemsAllBut1Key = keyCode;
             case "throwHalf" -> throwHalfAllBut1Key = keyCode;
             case "hotbarModifiers" -> hotbarModifiersAllBut1Key = keyCode;
+            case "fillExisting" -> fillExistingAllBut1Key = keyCode;
         }
     }
 
@@ -133,11 +141,12 @@ public class InvTweaksConfig {
             case "bundleInsertItems" -> bundleInsertItemsOnly1Key = keyCode;
             case "throwHalf" -> throwHalfOnly1Key = keyCode;
             case "hotbarModifiers" -> hotbarModifiersOnly1Key = keyCode;
+            case "fillExisting" -> fillExistingOnly1Key = keyCode;
         }
     }
 
     /**
-     * Reset a tweak's keys back to global defaults.
+     * Reset a tweak to use global keys.
      */
     public void resetToGlobal(String tweakName) {
         setPerTweakAllBut1Key(tweakName, -1);
@@ -211,6 +220,10 @@ public class InvTweaksConfig {
     /**
      * Check if the throw-all-but-1 key is pressed.
      */
+    public boolean isFillExistingKeyPressed() {
+        return isKeyPressed(fillExistingKey);
+    }
+
     public boolean isThrowAllBut1KeyPressed() {
         return isKeyPressed(throwAllBut1Key);
     }
@@ -295,7 +308,7 @@ public class InvTweaksConfig {
      */
     public boolean isAnyModifierPressed() {
         if (isKeyPressed(allBut1Key) || isKeyPressed(only1Key)) return true;
-        String[] tweaks = {"clickPickup", "shiftClick", "bundleExtract", "bundleInsertBundle", "bundleInsertItems", "throwHalf", "hotbarModifiers"};
+        String[] tweaks = {"clickPickup", "shiftClick", "bundleExtract", "bundleInsertBundle", "bundleInsertItems", "throwHalf", "hotbarModifiers", "fillExisting"};
         for (String tweak : tweaks) {
             if (hasCustomKeys(tweak)) {
                 int ab1 = getEffectiveAllBut1Key(tweak);
@@ -304,5 +317,27 @@ public class InvTweaksConfig {
             }
         }
         return false;
+    }
+
+    /**
+     * Check if the "fill existing stacks" combo is active.
+     * This fires when BOTH the allBut1 and only1 effective keys for "fillExisting"
+     * (or the shiftClick tweak keys, if fillExisting has no custom keys) are pressed.
+     * Uses fillExisting per-tweak keys if set, otherwise falls back to global keys.
+     */
+    public boolean isFillExistingActive() {
+        return isKeyPressed(fillExistingKey);
+    }
+
+    /**
+     * Debug logging helper with per-tweak tags.
+     * Only logs when enableDebugLogging is true.
+     * Usage: InvTweaksConfig.debugLog("SHIFT", "allbut1 mode | slot=%d | count=%d", slotId, count);
+     */
+    public static void debugLog(String tag, String message, Object... args) {
+        InvTweaksConfig cfg = get();
+        if (cfg == null || !cfg.enableDebugLogging) return;
+        String formatted = args.length > 0 ? String.format(message, args) : message;
+        LOGGER.info("[IT:{}] {}", tag, formatted);
     }
 }
