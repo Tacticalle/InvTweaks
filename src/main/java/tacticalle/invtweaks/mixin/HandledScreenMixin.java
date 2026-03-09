@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
@@ -452,6 +453,138 @@ public abstract class HandledScreenMixin {
                 }
             }
         }
+    }
+
+    // ========== SCROLL TRANSFER ==========
+
+    @Inject(method = "mouseScrolled", at = @At("HEAD"), cancellable = true)
+    private void onMouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount, CallbackInfoReturnable<Boolean> cir) {
+        LOGGER.info("[IT:SCROLL-RAW] verticalAmount={} horizontalAmount={}", verticalAmount, horizontalAmount);
+        InvTweaksConfig config = InvTweaksConfig.get();
+        if (!config.enableScrollTransfer) return;
+
+        // Player-only inventory (E key): do nothing for now (deferred to v2)
+        if (it_isPlayerOnlyScreen()) return;
+
+        // Need a focused slot with items
+        if (focusedSlot == null) return;
+        ItemStack hoveredStack = focusedSlot.getStack();
+        if (hoveredStack.isEmpty()) return;
+
+        // Allow scroll even with items on cursor — cursor items stay
+
+        // Determine scroll mode (flush / leave1 / null)
+        String scrollMode = config.getScrollTransferMode();
+        if (scrollMode == null) return;
+
+        // Determine scroll direction
+        boolean scrollUp = verticalAmount > 0;
+        boolean scrollDown = verticalAmount < 0;
+        if (!scrollUp && !scrollDown) return;
+
+        // Determine which side the hovered slot is on
+        boolean hoveredIsPlayer = focusedSlot.inventory instanceof net.minecraft.entity.player.PlayerInventory;
+
+        // Scroll up = items go UP to chest = scan player side to QUICK_MOVE them
+        // Scroll down = items go DOWN to player = scan container side to QUICK_MOVE them
+        // This is independent of which side the cursor is hovering
+        boolean scanPlayerSide = scrollUp;
+
+        // Cancel vanilla scroll (hotbar scrolling)
+        cir.setReturnValue(true);
+
+        var mc = MinecraftClient.getInstance();
+        var im = mc.interactionManager;
+        var player = mc.player;
+        if (im == null || player == null) return;
+
+        Item itemType = hoveredStack.getItem();
+        int hoveredSlotId = focusedSlot.id;
+
+        // Find all slots on the SAME side as the hovered slot that contain the same item type
+        java.util.List<Integer> matchingSlots = new java.util.ArrayList<>();
+        for (int i = 0; i < handler.slots.size(); i++) {
+            Slot s = handler.slots.get(i);
+            if (s.getStack().isEmpty()) continue;
+            if (s.getStack().getItem() != itemType) continue;
+            if (!ItemStack.areItemsAndComponentsEqual(s.getStack(), hoveredStack)) continue;
+
+            // Must be on the side we're scanning
+            boolean slotIsPlayer = s.inventory instanceof net.minecraft.entity.player.PlayerInventory;
+            if (slotIsPlayer != scanPlayerSide) continue;
+
+            matchingSlots.add(i);
+        }
+
+        if (matchingSlots.isEmpty()) return;
+
+        InvTweaksConfig.debugLog("SCROLL", "%s | item=%s | side=%s | direction=%s | matchingSlots=%d",
+                scrollMode, itemType, scanPlayerSide ? "player" : "container",
+                scrollUp ? "up" : "down", matchingSlots.size());
+
+        if (scrollMode.equals("flush")) {
+            // Flush mode: shift-click every matching slot to move full stacks
+            for (int slotId : matchingSlots) {
+                ItemStack slotStack = handler.slots.get(slotId).getStack();
+                if (slotStack.isEmpty()) continue; // already moved by a previous QUICK_MOVE
+
+                InvTweaksConfig.debugLog("SCROLL", "flush QUICK_MOVE | slot=%d | count=%d", slotId, slotStack.getCount());
+                im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.QUICK_MOVE, player);
+            }
+        } else {
+            // Leave-1 mode: for each matching slot, move all but 1
+            for (int slotId : matchingSlots) {
+                ItemStack slotStack = handler.slots.get(slotId).getStack();
+                if (slotStack.isEmpty()) continue;
+                if (slotStack.getCount() <= 1) {
+                    InvTweaksConfig.debugLog("SCROLL", "leave1 skip | slot=%d | count=1", slotId);
+                    continue; // already has only 1, nothing to move
+                }
+
+                InvTweaksConfig.debugLog("SCROLL", "leave1 | slot=%d | count=%d", slotId, slotStack.getCount());
+
+                // Sequence:
+                // 1. Pick up full stack from slot → cursor=N, slot=empty
+                im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                // 2. Right-click to place 1 back → cursor=N-1, slot=1
+                im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
+                // 3. Deposit cursor (N-1) into a temp slot, then QUICK_MOVE it to the other side
+                int tempSlot = it_findEmptySlotOnSameSide(slotId, scanPlayerSide);
+                if (tempSlot >= 0) {
+                    im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.QUICK_MOVE, player);
+                } else {
+                    // No temp slot — put items back in source slot
+                    InvTweaksConfig.debugLog("SCROLL", "leave1 no temp slot | slot=%d | putting back", slotId);
+                    im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                }
+            }
+        }
+
+        InvTweaksConfig.debugLog("SCROLL", "complete | cursorEmpty=%s", handler.getCursorStack().isEmpty());
+    }
+
+    // ========== SCROLL TRANSFER HELPERS ==========
+
+    /**
+     * Find an empty slot on the same side as the source slot (for temp storage during leave-1 scroll).
+     */
+    @Unique
+    private int it_findEmptySlotOnSameSide(int sourceSlotId, boolean sourceIsPlayer) {
+        for (int i = 0; i < handler.slots.size(); i++) {
+            if (i == sourceSlotId) continue;
+            Slot s = handler.slots.get(i);
+            if (!s.getStack().isEmpty()) continue;
+
+            boolean slotIsPlayer = s.inventory instanceof net.minecraft.entity.player.PlayerInventory;
+            if (slotIsPlayer != sourceIsPlayer) continue;
+
+            // For player inventory, skip crafting/armor slots (indices 0-8 in InventoryScreen)
+            // But since we already checked it_isPlayerOnlyScreen() and returned, we're in a container screen
+            // where all player inv slots are valid
+            return i;
+        }
+        return -1;
     }
 
     // ========== REFLECTION DETECTION ==========

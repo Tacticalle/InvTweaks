@@ -35,8 +35,13 @@ public class InvTweaksConfig {
     public int throwAllBut1Key = GLFW.GLFW_KEY_G;
     public int throwHalfKey = GLFW.GLFW_KEY_LEFT_ALT;
     public int fillExistingKey = GLFW.GLFW_KEY_LEFT_ALT;
+    public int scrollLeave1Key = GLFW.GLFW_KEY_LEFT_CONTROL;
     public boolean enableHotbarModifiers = true;
     public boolean enableFillExisting = true;
+    // Scroll transfer
+    public boolean enableScrollTransfer = true;
+    // Whether bare scroll triggers flush, or if modifier is required for any scroll action
+    public boolean scrollRequiresModifier = false;
 
     // Per-tweak modifier key overrides (-1 means "use global default")
     public int clickPickupAllBut1Key = -1;
@@ -55,6 +60,8 @@ public class InvTweaksConfig {
     public int hotbarModifiersOnly1Key = -1;
     public int fillExistingAllBut1Key = -1;
     public int fillExistingOnly1Key = -1;
+    public int scrollTransferAllBut1Key = -1;
+    public int scrollTransferOnly1Key = -1;
 
     // Debug logging
     public boolean enableDebugLogging = false;
@@ -75,6 +82,7 @@ public class InvTweaksConfig {
             case "throwHalf" -> throwHalfAllBut1Key;
             case "hotbarModifiers" -> hotbarModifiersAllBut1Key;
             case "fillExisting" -> fillExistingAllBut1Key;
+            case "scrollTransfer" -> scrollTransferAllBut1Key;
             default -> -1;
         };
         return perTweak != -1 ? perTweak : allBut1Key;
@@ -94,6 +102,7 @@ public class InvTweaksConfig {
             case "throwHalf" -> throwHalfOnly1Key;
             case "hotbarModifiers" -> hotbarModifiersOnly1Key;
             case "fillExisting" -> fillExistingOnly1Key;
+            case "scrollTransfer" -> scrollTransferOnly1Key;
             default -> -1;
         };
         return perTweak != -1 ? perTweak : only1Key;
@@ -112,6 +121,7 @@ public class InvTweaksConfig {
             case "throwHalf" -> throwHalfAllBut1Key != -1 || throwHalfOnly1Key != -1;
             case "hotbarModifiers" -> hotbarModifiersAllBut1Key != -1 || hotbarModifiersOnly1Key != -1;
             case "fillExisting" -> fillExistingAllBut1Key != -1 || fillExistingOnly1Key != -1;
+            case "scrollTransfer" -> scrollTransferAllBut1Key != -1 || scrollTransferOnly1Key != -1;
             default -> false;
         };
     }
@@ -129,6 +139,7 @@ public class InvTweaksConfig {
             case "throwHalf" -> throwHalfAllBut1Key = keyCode;
             case "hotbarModifiers" -> hotbarModifiersAllBut1Key = keyCode;
             case "fillExisting" -> fillExistingAllBut1Key = keyCode;
+            case "scrollTransfer" -> scrollTransferAllBut1Key = keyCode;
         }
     }
 
@@ -142,6 +153,7 @@ public class InvTweaksConfig {
             case "throwHalf" -> throwHalfOnly1Key = keyCode;
             case "hotbarModifiers" -> hotbarModifiersOnly1Key = keyCode;
             case "fillExisting" -> fillExistingOnly1Key = keyCode;
+            case "scrollTransfer" -> scrollTransferOnly1Key = keyCode;
         }
     }
 
@@ -253,6 +265,7 @@ public class InvTweaksConfig {
      * Get a human-readable name for a GLFW key code.
      */
     public static String getKeyName(int glfwKey) {
+        if (glfwKey == -1) return "NONE";
         return switch (glfwKey) {
             case GLFW.GLFW_KEY_LEFT_CONTROL, GLFW.GLFW_KEY_RIGHT_CONTROL -> "CTRL";
             case GLFW.GLFW_KEY_LEFT_ALT, GLFW.GLFW_KEY_RIGHT_ALT -> "ALT";
@@ -308,7 +321,7 @@ public class InvTweaksConfig {
      */
     public boolean isAnyModifierPressed() {
         if (isKeyPressed(allBut1Key) || isKeyPressed(only1Key)) return true;
-        String[] tweaks = {"clickPickup", "shiftClick", "bundleExtract", "bundleInsertBundle", "bundleInsertItems", "throwHalf", "hotbarModifiers", "fillExisting"};
+        String[] tweaks = {"clickPickup", "shiftClick", "bundleExtract", "bundleInsertBundle", "bundleInsertItems", "throwHalf", "hotbarModifiers", "fillExisting", "scrollTransfer"};
         for (String tweak : tweaks) {
             if (hasCustomKeys(tweak)) {
                 int ab1 = getEffectiveAllBut1Key(tweak);
@@ -327,6 +340,34 @@ public class InvTweaksConfig {
      */
     public boolean isFillExistingActive() {
         return isKeyPressed(fillExistingKey);
+    }
+
+    /**
+     * Determine the scroll transfer mode based on modifier keys and config.
+     * Returns: "flush" (move all), "leave1" (leave 1 behind), or null (do nothing).
+     *
+     * When scrollRequiresModifier is false (default):
+     *   - No modifier held → "flush"
+     *   - allBut1 modifier held → "leave1"
+     *   - only1 modifier held → null (unused for now)
+     *
+     * When scrollRequiresModifier is true:
+     *   - No modifier held → null (do nothing)
+     *   - allBut1 modifier held → "flush"
+     *   - only1 modifier held → "leave1"
+     */
+    public String getScrollTransferMode() {
+        boolean leave1Pressed = isKeyPressed(scrollLeave1Key);
+
+        if (scrollRequiresModifier) {
+            // Strict mode: modifier required for any scroll action
+            if (leave1Pressed) return "leave1";
+            return null; // no modifier = do nothing
+        } else {
+            // Default mode: bare scroll = flush, modifier = leave1
+            if (leave1Pressed) return "leave1";
+            return "flush"; // no modifier = flush all
+        }
     }
 
     /**

@@ -243,6 +243,15 @@ public class InvTweaksConfigScreen extends Screen {
                 button -> startCapture("fillExistingKey", button)
         ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
         entryList.addConfigEntry(new KeyBindEntry("Fill Existing:", "(modifier + shift-click)", GREEN, fillExistingKeyBtn));
+
+        // ---- Scroll Transfer ----
+        entryList.addConfigEntry(new SectionHeaderEntry("\u00a7l--- Scroll Transfer ---"));
+
+        ButtonWidget scrollModKeyBtn = ButtonWidget.builder(
+                Text.literal(InvTweaksConfig.getKeyName(config.scrollLeave1Key)),
+                button -> startCapture("scrollModifierKey", button)
+        ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new KeyBindEntry("Scroll Leave-1:", "(hold + scroll)", AQUA, scrollModKeyBtn));
     }
 
     // ---- Per-tweak key overrides ----
@@ -319,6 +328,10 @@ public class InvTweaksConfigScreen extends Screen {
                 () -> config.enableHotbarModifiers, v -> config.enableHotbarModifiers = v));
         entryList.addConfigEntry(new FeatureEntry("Fill Existing Stacks", toggleW,
                 () -> config.enableFillExisting, v -> config.enableFillExisting = v));
+        entryList.addConfigEntry(new FeatureEntry("Scroll Transfer", toggleW,
+                () -> config.enableScrollTransfer, v -> config.enableScrollTransfer = v));
+        entryList.addConfigEntry(new FeatureEntry("Require Modifier for Scroll", toggleW,
+                () -> config.scrollRequiresModifier, v -> config.scrollRequiresModifier = v));
     }
 
     // ---- Debug section ----
@@ -341,7 +354,8 @@ public class InvTweaksConfigScreen extends Screen {
         if (capturingKey != null) {
             int keyCode = input.key();
             if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-                cancelCapture();
+                // ESC = set key to "none" (-1)
+                applyCapture(-1);
                 return true;
             }
             applyCapture(keyCode);
@@ -372,6 +386,11 @@ public class InvTweaksConfigScreen extends Screen {
             if (capturingButton != null) {
                 capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
             }
+        } else if (capturingKey.equals("scrollModifierKey")) {
+            config.scrollLeave1Key = keyCode;
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
         } else if (capturingKey.equals("throwAllBut1Key")) {
             config.throwAllBut1Key = keyCode;
             if (capturingButton != null) {
@@ -379,6 +398,11 @@ public class InvTweaksConfigScreen extends Screen {
             }
         } else if (capturingKey.equals("fillExistingKey")) {
             config.fillExistingKey = keyCode;
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
+        } else if (capturingKey.equals("scrollModifierKey")) {
+            config.scrollLeave1Key = keyCode;
             if (capturingButton != null) {
                 capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
             }
@@ -426,6 +450,10 @@ public class InvTweaksConfigScreen extends Screen {
             if (capturingButton != null) {
                 capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.fillExistingKey)));
             }
+        } else if (capturingKey.equals("scrollModifierKey")) {
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.scrollLeave1Key)));
+            }
         } else if (capturingKey.equals("throwAllBut1Key")) {
             if (capturingButton != null) {
                 capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.throwAllBut1Key)));
@@ -433,6 +461,10 @@ public class InvTweaksConfigScreen extends Screen {
         } else if (capturingKey.equals("fillExistingKey")) {
             if (capturingButton != null) {
                 capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.fillExistingKey)));
+            }
+        } else if (capturingKey.equals("scrollModifierKey")) {
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.scrollLeave1Key)));
             }
         } else if (capturingKey.equals("throwAllBut1Key")) {
             if (capturingButton != null) {
@@ -653,7 +685,7 @@ public class InvTweaksConfigScreen extends Screen {
             int y = getY();
             int w = getWidth();
             context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, GRAY);
-            int toggleX = x + (int)(w * 0.55);
+            int toggleX = x + w - toggleBtn.getWidth();
             toggleBtn.setX(toggleX);
             toggleBtn.setY(y);
             toggleBtn.render(context, mouseX, mouseY, delta);
