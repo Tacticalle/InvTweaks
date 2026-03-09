@@ -252,6 +252,12 @@ public class InvTweaksConfigScreen extends Screen {
                 button -> startCapture("scrollModifierKey", button)
         ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
         entryList.addConfigEntry(new KeyBindEntry("Scroll Leave-1:", "(hold + scroll)", AQUA, scrollModKeyBtn));
+
+        // ---- Copy/Paste Layout ----
+        entryList.addConfigEntry(new SectionHeaderEntry("\u00a7l--- Copy/Paste Layout ---"));
+        entryList.addConfigEntry(new InfoTextEntry("  Copy: Ctrl+C in container GUI", GREEN));
+        entryList.addConfigEntry(new InfoTextEntry("  Paste: Ctrl+V in container GUI", GREEN));
+        entryList.addConfigEntry(new InfoTextEntry("  (Cmd+C/V also works on macOS)", DARK_GRAY));
     }
 
     // ---- Per-tweak key overrides ----
@@ -330,6 +336,8 @@ public class InvTweaksConfigScreen extends Screen {
                 () -> config.enableFillExisting, v -> config.enableFillExisting = v));
         entryList.addConfigEntry(new FeatureEntry("Scroll Transfer", toggleW,
                 () -> config.enableScrollTransfer, v -> config.enableScrollTransfer = v));
+        entryList.addConfigEntry(new FeatureEntry("Copy/Paste Layout", toggleW,
+                () -> config.enableCopyPaste, v -> config.enableCopyPaste = v));
         entryList.addConfigEntry(new FeatureEntry("Require Modifier for Scroll", toggleW,
                 () -> config.scrollRequiresModifier, v -> config.scrollRequiresModifier = v));
     }

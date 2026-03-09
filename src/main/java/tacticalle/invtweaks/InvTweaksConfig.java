@@ -38,6 +38,8 @@ public class InvTweaksConfig {
     public int scrollLeave1Key = GLFW.GLFW_KEY_LEFT_CONTROL;
     public boolean enableHotbarModifiers = true;
     public boolean enableFillExisting = true;
+    // Copy/paste layout
+    public boolean enableCopyPaste = true;
     // Scroll transfer
     public boolean enableScrollTransfer = true;
     // Whether bare scroll triggers flush, or if modifier is required for any scroll action

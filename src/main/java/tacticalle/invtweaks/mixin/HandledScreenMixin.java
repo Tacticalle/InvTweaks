@@ -13,6 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
+import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.network.ClientPlayerInteractionManager;
 import net.minecraft.item.BundleItem;
 import net.minecraft.item.Item;
@@ -290,8 +291,10 @@ public abstract class HandledScreenMixin {
                 // If both true, it's a macOS bulk-move ghost — block it.
                 if (focusedSlot == null || focusedSlot.id != slotId) {
                     // Slot doesn't match cursor — could be Mouse Tweaks or bulk-move.
-                    // Check if Mouse Tweaks is calling us via reflection.
-                    if (!it_isCalledViaReflection()) {
+                    boolean viaReflection = it_isCalledViaReflection();
+                    InvTweaksConfig.debugLog("SHIFT", "focusedSlot mismatch | focused=%d | clicked=%d | viaReflection=%s",
+                        focusedSlot != null ? focusedSlot.id : -1, slotId, viaReflection);
+                    if (!viaReflection) {
                         // Not reflection — this is a macOS bulk-move ghost, block it
                         ci.cancel();
                         return;
@@ -452,6 +455,44 @@ public abstract class HandledScreenMixin {
                     }
                 }
             }
+        }
+    }
+
+    // ========== COPY/PASTE LAYOUT ==========
+
+    @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
+    private void onKeyPressed(KeyInput input, CallbackInfoReturnable<Boolean> cir) {
+        InvTweaksConfig config = InvTweaksConfig.get();
+        if (!config.enableCopyPaste) return;
+
+        int keyCode = input.key();
+        long windowHandle = MinecraftClient.getInstance().getWindow().getHandle();
+        boolean ctrlPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS ||
+                              GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS;
+        // On macOS, also check Command (Super) key as Ctrl equivalent
+        boolean superPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_SUPER) == GLFW.GLFW_PRESS ||
+                               GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_SUPER) == GLFW.GLFW_PRESS;
+        boolean modHeld = ctrlPressed || superPressed;
+
+        if (!modHeld) return;
+
+        boolean isPlayerOnly = it_isPlayerOnlyScreen();
+
+        if (keyCode == GLFW.GLFW_KEY_C) {
+            // Copy layout
+            InvTweaksConfig.debugLog("COPY", "Ctrl+C detected | playerOnly=%s", isPlayerOnly);
+            tacticalle.invtweaks.LayoutClipboard.copyLayout(handler, isPlayerOnly);
+            cir.setReturnValue(true);
+        } else if (keyCode == GLFW.GLFW_KEY_V) {
+            // Paste layout
+            InvTweaksConfig.debugLog("PASTE", "Ctrl+V detected | playerOnly=%s", isPlayerOnly);
+            tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly);
+            cir.setReturnValue(true);
+        } else if (keyCode == GLFW.GLFW_KEY_X) {
+            // Cut layout
+            InvTweaksConfig.debugLog("CUT", "Ctrl+X detected | playerOnly=%s", isPlayerOnly);
+            tacticalle.invtweaks.LayoutClipboard.cutLayout(handler, isPlayerOnly);
+            cir.setReturnValue(true);
         }
     }
 
