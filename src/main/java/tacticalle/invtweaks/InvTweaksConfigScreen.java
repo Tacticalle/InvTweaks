@@ -8,6 +8,8 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.ElementListWidget;
 import net.minecraft.client.input.KeyInput;
+import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
@@ -31,6 +33,7 @@ public class InvTweaksConfigScreen extends Screen {
     private String capturingKey = null;
     private ButtonWidget allBut1KeyBtn;
     private ButtonWidget only1KeyBtn;
+    private ButtonWidget openConfigKeyBtn;
 
     public InvTweaksConfigScreen(Screen parent) {
         super(Text.literal("InvTweaks Configuration"));
@@ -69,6 +72,17 @@ public class InvTweaksConfigScreen extends Screen {
                 }).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
         entryList.addConfigEntry(new KeyBindEntry("Only 1 key:", "(take/move exactly 1)", AQUA, only1KeyBtn));
 
+        // Open Config keybind row — reads from the Fabric KeyBinding directly
+        KeyBinding configKey = InvTweaksClient.openConfigKey;
+        String configKeyName = configKey != null
+                ? configKey.getBoundKeyLocalizedText().getString()
+                : "?";
+        openConfigKeyBtn = ButtonWidget.builder(
+                Text.literal(configKeyName),
+                button -> {
+                    capturingKey = "openconfig";
+                    button.setMessage(Text.literal("> Press a key <"));
+                }).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
         // Section header
         entryList.addConfigEntry(new HeaderEntry("Enabled", "Keys"));
 
@@ -89,6 +103,7 @@ public class InvTweaksConfigScreen extends Screen {
                 () -> config.enableBundleInsertCursorItems, v -> config.enableBundleInsertCursorItems = v,
                 () -> config.flipBundleInsertCursorItems, v -> config.flipBundleInsertCursorItems = v));
 
+        entryList.addConfigEntry(new KeyBindEntry("Open Config key:", "(open this screen)", GRAY, openConfigKeyBtn));
         // Debug logging
         entryList.addConfigEntry(new DebugEntry("Debug Logging", toggleW,
                 () -> config.enableDebugLogging, v -> config.enableDebugLogging = v));
@@ -113,9 +128,18 @@ public class InvTweaksConfigScreen extends Screen {
             if (capturingKey.equals("allbut1")) {
                 config.allBut1Key = keyCode;
                 allBut1KeyBtn.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
-            } else {
+            } else if (capturingKey.equals("only1")) {
                 config.only1Key = keyCode;
                 only1KeyBtn.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            } else if (capturingKey.equals("openconfig")) {
+                // Update the Fabric KeyBinding directly
+                KeyBinding configKey = InvTweaksClient.openConfigKey;
+                if (configKey != null) {
+                    configKey.setBoundKey(InputUtil.Type.KEYSYM.createFromCode(keyCode));
+                    KeyBinding.updateKeysByCode();
+                }
+                openConfigKeyBtn.setMessage(Text.literal(
+                        configKey != null ? configKey.getBoundKeyLocalizedText().getString() : InvTweaksConfig.getKeyName(keyCode)));
             }
             capturingKey = null;
             return true;
@@ -127,8 +151,12 @@ public class InvTweaksConfigScreen extends Screen {
         if (capturingKey != null) {
             if (capturingKey.equals("allbut1")) {
                 allBut1KeyBtn.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.allBut1Key)));
-            } else {
+            } else if (capturingKey.equals("only1")) {
                 only1KeyBtn.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.only1Key)));
+            } else if (capturingKey.equals("openconfig")) {
+                KeyBinding configKey = InvTweaksClient.openConfigKey;
+                openConfigKeyBtn.setMessage(Text.literal(
+                        configKey != null ? configKey.getBoundKeyLocalizedText().getString() : "?"));
             }
             capturingKey = null;
         }

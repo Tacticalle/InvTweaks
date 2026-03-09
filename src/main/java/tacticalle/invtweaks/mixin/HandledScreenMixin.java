@@ -320,26 +320,67 @@ public abstract class HandledScreenMixin {
         ItemStack remaining = slot.getStack();
 
         if (remaining.isEmpty() && it_preClickItem != null && it_preClickSnapshot != null) {
-            // Vanilla moved everything. Find where items went.
-            int bestSlot = -1;
-            int bestIncrease = 0;
+            // Vanilla moved everything. Find ALL destination slots where items increased.
+            // We need to undo so that exactly 1 item ends up back in the source slot.
+            //
+            // Strategy: collect all items from all destination slots that received items,
+            // then redistribute: place 1 in source, put the rest back filling partial stacks first.
+
+            // Build a list of (slotId, increase) for all slots that gained items
+            java.util.List<int[]> changedSlots = new java.util.ArrayList<>();
+            int totalIncrease = 0;
             for (Map.Entry<Integer, Integer> entry : it_preClickSnapshot.entrySet()) {
                 int idx = entry.getKey();
                 int oldCount = entry.getValue();
                 ItemStack current = handler.getSlot(idx).getStack();
                 int newCount = (!current.isEmpty() && current.getItem() == it_preClickItem) ? current.getCount() : 0;
                 int increase = newCount - oldCount;
-                if (increase > bestIncrease) {
-                    bestIncrease = increase;
-                    bestSlot = idx;
+                if (increase > 0) {
+                    changedSlots.add(new int[]{idx, increase, oldCount, newCount});
+                    totalIncrease += increase;
                 }
             }
 
-            if (bestSlot >= 0 && bestIncrease > 1) {
-                // Move N-1: pick up from dest, place 1 back in source, put rest back in dest
-                im.clickSlot(handler.syncId, bestSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+            if (totalIncrease <= 1) {
+                // Only 1 item was moved — nothing to undo for allbut1
+                // (we'd want to keep 1 in source but only 1 was moved, so put it back)
+                if (totalIncrease == 1 && changedSlots.size() == 1) {
+                    int destIdx = changedSlots.get(0)[0];
+                    im.clickSlot(handler.syncId, destIdx, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                }
+            } else if (changedSlots.size() == 1) {
+                // Simple case: all items went to one slot. Pick up, right-click 1 back to source, put rest back.
+                int destIdx = changedSlots.get(0)[0];
+                im.clickSlot(handler.syncId, destIdx, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                 im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
-                im.clickSlot(handler.syncId, bestSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                im.clickSlot(handler.syncId, destIdx, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+            } else {
+                // Complex case: items were split across multiple destination slots.
+                // The typical scenario: vanilla filled a partial stack to its max, then overflowed
+                // the remainder into another slot.
+                //
+                // We need to return exactly 1 item to source. Strategy:
+                // 1. Pick up the items from the OVERFLOW slot (the one that was empty before, i.e. oldCount==0)
+                //    or the slot with the smallest increase.
+                // 2. Right-click 1 into the source slot.
+                // 3. Put the rest back into the overflow slot.
+                //
+                // Find the best slot to pull from: prefer the overflow slot (was empty before),
+                // since pulling from the filled partial stack would leave it at max-1 again.
+                // Sort: prefer slots where oldCount was 0 (overflow), then smallest increase.
+                changedSlots.sort((a, b) -> {
+                    // Prefer overflow slots (oldCount == 0)
+                    if (a[2] == 0 && b[2] != 0) return -1;
+                    if (a[2] != 0 && b[2] == 0) return 1;
+                    // Then prefer smallest increase (less disruption)
+                    return Integer.compare(a[1], b[1]);
+                });
+
+                int pullSlot = changedSlots.get(0)[0];
+                im.clickSlot(handler.syncId, pullSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
+                im.clickSlot(handler.syncId, pullSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
             }
         } else if (remaining.getCount() > 1) {
             // Vanilla couldn't move everything (destination full or partial move)
