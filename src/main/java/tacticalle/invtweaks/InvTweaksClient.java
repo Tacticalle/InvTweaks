@@ -7,7 +7,9 @@ import org.slf4j.LoggerFactory;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.util.Identifier;
@@ -34,6 +36,15 @@ public class InvTweaksClient implements ClientModInitializer {
                 if (client.currentScreen == null) {
                     client.setScreen(new InvTweaksConfigScreen(null));
                 }
+            }
+        });
+
+        // Register overlay rendering for all HandledScreen subclasses (including InventoryScreen)
+        ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
+            if (screen instanceof HandledScreen<?> handledScreen) {
+                ScreenEvents.afterRender(screen).register((s, context, mouseX, mouseY, tickDelta) -> {
+                    InvTweaksOverlay.render(context, handledScreen, scaledWidth, scaledHeight);
+                });
             }
         });
 

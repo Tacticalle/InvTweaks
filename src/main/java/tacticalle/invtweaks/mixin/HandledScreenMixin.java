@@ -504,6 +504,9 @@ public abstract class HandledScreenMixin {
         InvTweaksConfig config = InvTweaksConfig.get();
         if (!config.enableScrollTransfer) return;
 
+        // Creative inventory has its own scroll behavior (tab scrolling) — don't intercept
+        if (((Object) this) instanceof net.minecraft.client.gui.screen.ingame.CreativeInventoryScreen) return;
+
         // Player-only inventory (E key): do nothing for now (deferred to v2)
         if (it_isPlayerOnlyScreen()) return;
 

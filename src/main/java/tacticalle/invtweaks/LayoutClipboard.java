@@ -11,7 +11,6 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
@@ -25,7 +24,6 @@ public class LayoutClipboard {
     // Separate clipboards for container and player inventory
     private static LayoutSnapshot containerClipboard = null;
     private static LayoutSnapshot playerClipboard = null;
-    private static String lastMessage = null;
 
     /**
      * A snapshot of one slot's contents.
@@ -45,12 +43,6 @@ public class LayoutClipboard {
             this.slots = slots;
             this.isPlayerInventory = isPlayerInventory;
         }
-    }
-
-    private static void sendMessage(PlayerEntity player, String msg) {
-        if (msg.equals(lastMessage)) return;
-        lastMessage = msg;
-        player.sendMessage(Text.literal(msg), false);
     }
 
     // ========== COPY ==========
@@ -94,12 +86,7 @@ public class LayoutClipboard {
             containerClipboard = new LayoutSnapshot(slots.size(), slots, isPlayerOnly);
         }
 
-        // Send feedback
-        MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player != null) {
-            sendMessage(mc.player, "§aLayout copied (" + slots.size() + " slots)");
-        }
-        lastMessage = null; // reset so next message always shows
+        InvTweaksOverlay.show("Layout copied", 0xFF55FF55);
         InvTweaksConfig.debugLog("COPY", "copied %d slots | playerOnly=%s", slots.size(), isPlayerOnly);
     }
 
@@ -117,7 +104,7 @@ public class LayoutClipboard {
         // Check clipboard (use the right one for context)
         LayoutSnapshot clipboard = isPlayerOnly ? playerClipboard : containerClipboard;
         if (clipboard == null) {
-            sendMessage(player, "§cNo layout copied");
+            InvTweaksOverlay.show("No layout copied", 0xFFFF5555);
             return;
         }
 
@@ -125,7 +112,7 @@ public class LayoutClipboard {
         if (clipboard.isPlayerInventory != isPlayerOnly) {
             String clipType = clipboard.isPlayerInventory ? "player inventory" : "container";
             String currentType = isPlayerOnly ? "player inventory" : "container";
-            sendMessage(player, "§cLayout was copied from " + clipType + ", can't paste into " + currentType);
+            InvTweaksOverlay.show("Layout was copied from " + clipType + ", can't paste into " + currentType, 0xFFFF5555);
             return;
         }
 
@@ -146,7 +133,7 @@ public class LayoutClipboard {
 
         // Size mismatch warning
         if (targetSlotIds.size() != clipboard.slotCount) {
-            sendMessage(player, "§eLayout size mismatch (copied " + clipboard.slotCount + " slots, this has " + targetSlotIds.size() + "). Pasting what fits.");
+            InvTweaksOverlay.show("Layout size mismatch. Pasting what fits.", 0xFFFFFF55);
             InvTweaksConfig.debugLog("PASTE", "size mismatch | clipboard=%d | target=%d", clipboard.slotCount, targetSlotIds.size());
         }
 
@@ -182,7 +169,6 @@ public class LayoutClipboard {
             }
         }
 
-        lastMessage = null; // reset for paste result
         InvTweaksConfig.debugLog("PASTE", "starting paste | targetSlots=%d | accessibleSlots=%d", slotsToProcess, allAccessibleSlots.size());
 
         int matchedSlots = 0;
@@ -195,7 +181,7 @@ public class LayoutClipboard {
                 InvTweaksConfig.debugLog("PASTE", "saving cursor items to temp slot %d", cursorSaveSlot);
                 im.clickSlot(handler.syncId, cursorSaveSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
             } else {
-                sendMessage(player, "§cNo room to temporarily store held items");
+                InvTweaksOverlay.show("No room to temporarily store held items", 0xFFFF5555);
                 return;
             }
         }
@@ -215,7 +201,7 @@ public class LayoutClipboard {
             }
         }
         if (alreadyMatches) {
-            sendMessage(player, "§aLayout already matches!");
+            InvTweaksOverlay.show("Layout already matches!", 0xFF55FF55);
             return;
         }
 
@@ -303,7 +289,7 @@ public class LayoutClipboard {
             im.clickSlot(handler.syncId, cursorSaveSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
         }
 
-        sendMessage(player, "§aLayout pasted: " + matchedSlots + "/" + slotsToProcess + " slots matched");
+        InvTweaksOverlay.show("Layout pasted", 0xFF55FF55);
         InvTweaksConfig.debugLog("PASTE", "complete | matched=%d/%d", matchedSlots, slotsToProcess);
     }
 
@@ -325,7 +311,7 @@ public class LayoutClipboard {
 
         if (isPlayerOnly) {
             // Player inventory: cut = just copy (nowhere to send items)
-            sendMessage(player, "§eLayout copied (cut does nothing extra for player inventory)");
+            InvTweaksOverlay.show("Layout copied", 0xFF55FF55);
             return;
         }
 
@@ -342,7 +328,7 @@ public class LayoutClipboard {
             moved++;
         }
 
-        sendMessage(player, "§aLayout cut (" + moved + " stacks moved to inventory)");
+        InvTweaksOverlay.show("Layout cut", 0xFF55FF55);
         InvTweaksConfig.debugLog("CUT", "complete | moved=%d stacks", moved);
     }
 
