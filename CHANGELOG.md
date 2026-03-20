@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.0] - 2026-03-20
+
+### Features
+- **Armor & Offhand in Player Inventory Copy/Paste** — Player inventory clipboard now captures armor slots (helmet, chestplate, leggings, boots) and offhand, for a total of 41 slots. Death auto-snapshots also include armor and offhand.
+- **Paste Quantity Maximization** — Pasting a layout now fills each target slot to the item's max stack size rather than the exact count from the clipboard snapshot. If you copied 16 diamonds, pasting will fill the slot to 64 if enough diamonds are available.
+- **Preview Grid Redesign** — Clipboard history preview grid now scales item icons to match dynamic slot sizes. Empty slots use distinct muted colors. Hovering an item in the preview shows its full tooltip. Player inventory preview shows a 5th row for armor (4 slots) and offhand (1 slot).
+- **Preview Summary Format** — Clipboard history preview now shows "X/Y slots taken" instead of "X stacks, Y items"
+
+### Bug Fixes
+- Fixed paste bouncing on repeated Ctrl+V — the "already matches" check now compares item type only (not count), so pressing Ctrl+V again after a successful paste correctly shows "Layout already matches!" instead of reshuffling items
+- Paste displacement now prefers non-hotbar slots when moving items out of the way, reducing unwanted hotbar clutter during paste operations
+
 ## [1.2.1] - 2026-03-20
 
 ### Bug Fixes
