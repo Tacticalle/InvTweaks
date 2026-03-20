@@ -258,6 +258,7 @@ public class InvTweaksConfigScreen extends Screen {
         entryList.addConfigEntry(new InfoTextEntry("  Copy: Ctrl+C in container GUI", GREEN));
         entryList.addConfigEntry(new InfoTextEntry("  Paste: Ctrl+V in container GUI", GREEN));
         entryList.addConfigEntry(new InfoTextEntry("  (Cmd+C/V also works on macOS)", DARK_GRAY));
+        entryList.addConfigEntry(new InfoTextEntry("  History: Shift+Tab in container GUI", GREEN));
     }
 
     // ---- Per-tweak key overrides ----
@@ -338,6 +339,15 @@ public class InvTweaksConfigScreen extends Screen {
                 () -> config.enableScrollTransfer, v -> config.enableScrollTransfer = v));
         entryList.addConfigEntry(new FeatureEntry("Copy/Paste Layout", toggleW,
                 () -> config.enableCopyPaste, v -> config.enableCopyPaste = v));
+
+        // Clipboard history settings
+        entryList.addConfigEntry(new SectionHeaderEntry("\u00a7l--- Clipboard History ---"));
+        entryList.addConfigEntry(new IntValueEntry("Max Clipboard History", 5, 200,
+                () -> config.clipboardMaxHistory, v -> config.clipboardMaxHistory = v));
+        entryList.addConfigEntry(new IntValueEntry("Auto-delete after (hrs playtime)", 0, 500,
+                () -> config.clipboardExpiryPlaytimeHours, v -> config.clipboardExpiryPlaytimeHours = v));
+        entryList.addConfigEntry(new InfoTextEntry("  (0 = never expire)", DARK_GRAY));
+
         entryList.addConfigEntry(new FeatureEntry("Require Modifier for Scroll", toggleW,
                 () -> config.scrollRequiresModifier, v -> config.scrollRequiresModifier = v));
     }
@@ -801,5 +811,72 @@ public class InvTweaksConfigScreen extends Screen {
         public List<? extends Element> children() { return List.of(); }
         @Override
         public List<? extends Selectable> selectableChildren() { return List.of(); }
+    }
+
+    // ========== Integer value row with +/- buttons ==========
+
+    private class IntValueEntry extends ConfigEntry {
+        private final String label;
+        private final int min;
+        private final int max;
+        private final java.util.function.Supplier<Integer> getter;
+        private final java.util.function.Consumer<Integer> setter;
+        private final ButtonWidget minusBtn;
+        private final ButtonWidget plusBtn;
+        private final ButtonWidget valueBtn;
+
+        IntValueEntry(String label, int min, int max,
+                      java.util.function.Supplier<Integer> getter, java.util.function.Consumer<Integer> setter) {
+            this.label = label;
+            this.min = min;
+            this.max = max;
+            this.getter = getter;
+            this.setter = setter;
+
+            int btnW = 20;
+            int valW = 50;
+
+            this.valueBtn = ButtonWidget.builder(Text.literal(String.valueOf(getter.get())), button -> {
+                // Click on value does nothing, just displays
+            }).dimensions(0, 0, valW, BUTTON_HEIGHT).build();
+
+            this.minusBtn = ButtonWidget.builder(Text.literal("-"), button -> {
+                int v = Math.max(min, getter.get() - 1);
+                setter.accept(v);
+                valueBtn.setMessage(Text.literal(String.valueOf(v)));
+            }).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
+
+            this.plusBtn = ButtonWidget.builder(Text.literal("+"), button -> {
+                int v = Math.min(max, getter.get() + 1);
+                setter.accept(v);
+                valueBtn.setMessage(Text.literal(String.valueOf(v)));
+            }).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
+        }
+
+        @Override
+        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+            int x = getX();
+            int y = getY();
+            int w = getWidth();
+            context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, WHITE);
+
+            int rightEdge = x + w;
+            plusBtn.setX(rightEdge - plusBtn.getWidth());
+            plusBtn.setY(y);
+            plusBtn.render(context, mouseX, mouseY, delta);
+
+            valueBtn.setX(plusBtn.getX() - valueBtn.getWidth() - 2);
+            valueBtn.setY(y);
+            valueBtn.render(context, mouseX, mouseY, delta);
+
+            minusBtn.setX(valueBtn.getX() - minusBtn.getWidth() - 2);
+            minusBtn.setY(y);
+            minusBtn.render(context, mouseX, mouseY, delta);
+        }
+
+        @Override
+        public List<? extends Element> children() { return List.of(minusBtn, valueBtn, plusBtn); }
+        @Override
+        public List<? extends Selectable> selectableChildren() { return List.of(minusBtn, valueBtn, plusBtn); }
     }
 }

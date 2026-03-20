@@ -32,7 +32,7 @@ public class InvTweaksConfig {
     public boolean enableBundleInsertCursorItems = true;
     public boolean enableThrowHalf = true;
     // Throwing modifier keys
-    public int throwAllBut1Key = GLFW.GLFW_KEY_G;
+    public int throwAllBut1Key = GLFW.GLFW_KEY_LEFT_CONTROL;
     public int throwHalfKey = GLFW.GLFW_KEY_LEFT_ALT;
     public int fillExistingKey = GLFW.GLFW_KEY_LEFT_ALT;
     public int scrollLeave1Key = GLFW.GLFW_KEY_LEFT_CONTROL;
@@ -64,6 +64,10 @@ public class InvTweaksConfig {
     public int fillExistingOnly1Key = -1;
     public int scrollTransferAllBut1Key = -1;
     public int scrollTransferOnly1Key = -1;
+
+    // Clipboard history
+    public int clipboardMaxHistory = 50;              // max entries to keep (range 5-200)
+    public int clipboardExpiryPlaytimeHours = 0;      // 0 = never expire, otherwise hours of in-game playtime
 
     // Debug logging
     public boolean enableDebugLogging = false;

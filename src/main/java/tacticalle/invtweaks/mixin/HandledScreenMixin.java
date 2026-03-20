@@ -467,6 +467,18 @@ public abstract class HandledScreenMixin {
 
         int keyCode = input.key();
         long windowHandle = MinecraftClient.getInstance().getWindow().getHandle();
+
+        // Clipboard history: Shift+Tab
+        boolean shiftHeld = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS ||
+                            GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
+        if (shiftHeld && keyCode == GLFW.GLFW_KEY_TAB) {
+            boolean isPlayerOnly = it_isPlayerOnlyScreen();
+            MinecraftClient.getInstance().setScreen(new tacticalle.invtweaks.ClipboardHistoryScreen(
+                    (HandledScreen<?>)(Object)this, handler, isPlayerOnly));
+            cir.setReturnValue(true);
+            return;
+        }
+
         boolean ctrlPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS ||
                               GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS;
         // On macOS, also check Command (Super) key as Ctrl equivalent
