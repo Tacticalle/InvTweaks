@@ -14,7 +14,7 @@ A Fabric mod for Minecraft that gives you precise control over how many items yo
 - **Fill Existing Stacks** — Hold a modifier key (default: `Alt`) + Shift+Click to distribute items only into existing partial stacks
 - **Scroll Transfer** — Scroll up to move matching items to the container, scroll down to move them to your inventory
 - **Scroll Leave-1** — Hold a modifier key (default: `Ctrl`) while scrolling to leave one behind in each slot
-- **Copy/Paste Layout** — Ctrl+C to snapshot a container or inventory layout (including armor and offhand), Ctrl+V to rearrange items to match, Ctrl+X to cut. Paste fills each slot to max stack size using available items.
+- **Copy/Paste Layout** — Ctrl+C to snapshot a container or inventory layout (including armor and offhand), Ctrl+V to rearrange items to match, Ctrl+X to cut. Paste fills each slot to max stack size using available items. Component data (enchantments, potion types, etc.) is tracked for accurate matching.
 - **Clipboard History** — Maintains a history of past clipboard snapshots. Press Shift+Tab while an inventory is open to browse, select, or delete saved layouts with item preview grids and hover tooltips.
 - **Death Auto-Snapshot** — Player inventory (including armor and offhand) is automatically saved to clipboard history on death so you can paste your layout back after respawning
 - **Persistent Clipboard** — Clipboard history is saved to disk and survives game restarts
@@ -59,7 +59,7 @@ Both left and right variants of modifier keys are recognized.
 
 InvTweaks is designed to work alongside other inventory mods:
 
-- **[Mouse Tweaks](https://modrinth.com/mod/mouse-tweaks)** — Fully compatible. InvTweaks detects Mouse Tweaks shift-drag operations and works correctly alongside them. Note: Mouse Tweaks' scroll wheel features may conflict with InvTweaks scroll transfer — disable one or the other if needed.
+- **[Mouse Tweaks](https://modrinth.com/mod/mouse-tweaks)** — Fully compatible. InvTweaks detects Mouse Tweaks shift-drag operations and works correctly alongside them. Note: Mouse Tweaks' scroll wheel features may conflict with InvTweaks scroll transfer — disable one or the other if needed. Ctrl+scroll leave-1 mode may also trigger allBut1 click pickup via phantom Mouse Tweaks events; rebind `scrollLeave1Key` to a different key as a workaround.
 - **[Mod Menu](https://modrinth.com/mod/modmenu)** — Provides an in-game configuration screen.
 - **Other inventory mods** — InvTweaks uses mixin injection on `HandledScreen` and should be compatible with most mods that don't override the same click handling methods.
 

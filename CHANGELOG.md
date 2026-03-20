@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.1] - 2026-03-20
+
+### Bug Fixes
+- **Component-Aware Clipboard** — Clipboard now tracks full item component data (enchantments, potion types, ominous bottle levels, tipped arrow variants, etc.) so paste correctly distinguishes between items of the same type with different data
+- Fixed death snapshot armor mapping — armor pieces were being saved in inverted order (boots in helmet slot and vice versa) due to a mismatch between PlayerInventory indices and snapshot key ordering
+- Fixed container paste displacing non-armor items from slots 5–8 — armor validation now only runs in player inventory, preventing shulker boxes, logs, and other items from being rejected out of regular container slots
+- Improved paste matching for same-type items with different component data — new four-tier ranking system prefers exact component matches and prioritizes items not already in their target position
+
 ## [1.3.0] - 2026-03-20
 
 ### Features
