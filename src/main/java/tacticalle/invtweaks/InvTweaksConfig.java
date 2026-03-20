@@ -42,8 +42,6 @@ public class InvTweaksConfig {
     public boolean enableCopyPaste = true;
     // Scroll transfer
     public boolean enableScrollTransfer = true;
-    // Whether bare scroll triggers flush, or if modifier is required for any scroll action
-    public boolean scrollRequiresModifier = false;
 
     // Per-tweak modifier key overrides (-1 means "use global default")
     public int clickPickupAllBut1Key = -1;
@@ -349,31 +347,17 @@ public class InvTweaksConfig {
     }
 
     /**
-     * Determine the scroll transfer mode based on modifier keys and config.
-     * Returns: "flush" (move all), "leave1" (leave 1 behind), or null (do nothing).
+     * Determine the scroll transfer mode based on modifier keys.
+     * Returns: "flush" (move all), "leave1" (leave 1 behind).
      *
-     * When scrollRequiresModifier is false (default):
+     * Bare scroll always triggers flush mode (when scroll transfer is enabled).
      *   - No modifier held → "flush"
-     *   - allBut1 modifier held → "leave1"
-     *   - only1 modifier held → null (unused for now)
-     *
-     * When scrollRequiresModifier is true:
-     *   - No modifier held → null (do nothing)
-     *   - allBut1 modifier held → "flush"
-     *   - only1 modifier held → "leave1"
+     *   - Leave-1 modifier held → "leave1"
      */
     public String getScrollTransferMode() {
         boolean leave1Pressed = isKeyPressed(scrollLeave1Key);
-
-        if (scrollRequiresModifier) {
-            // Strict mode: modifier required for any scroll action
-            if (leave1Pressed) return "leave1";
-            return null; // no modifier = do nothing
-        } else {
-            // Default mode: bare scroll = flush, modifier = leave1
-            if (leave1Pressed) return "leave1";
-            return "flush"; // no modifier = flush all
-        }
+        if (leave1Pressed) return "leave1";
+        return "flush";
     }
 
     /**

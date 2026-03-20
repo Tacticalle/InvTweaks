@@ -347,9 +347,6 @@ public class InvTweaksConfigScreen extends Screen {
         entryList.addConfigEntry(new IntValueEntry("Auto-delete after (hrs playtime)", 0, 500,
                 () -> config.clipboardExpiryPlaytimeHours, v -> config.clipboardExpiryPlaytimeHours = v));
         entryList.addConfigEntry(new InfoTextEntry("  (0 = never expire)", DARK_GRAY));
-
-        entryList.addConfigEntry(new FeatureEntry("Require Modifier for Scroll", toggleW,
-                () -> config.scrollRequiresModifier, v -> config.scrollRequiresModifier = v));
     }
 
     // ---- Debug section ----

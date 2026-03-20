@@ -187,16 +187,29 @@ public class ClipboardHistoryScreen extends Screen {
         context.drawCenteredTextWithShadow(this.textRenderer, Text.literal(timeStr),
                 rightPanelX + rightPanelWidth / 2, panelTop + 20, GRAY);
 
-        int gridY = panelTop + 30;
+        // Grid starts below the header area (title at +8, time label at +20, font ~9px)
+        int gridY = panelTop + 38;
         int gridBottomY;
+
+        // Available space for the grid inside the panel (with padding)
+        int panelPadding = 8;
+        int availableWidth = rightPanelWidth - panelPadding * 2;
+        int availableHeight = panelBottom - gridY - 20 - panelPadding; // 20px reserved for summary text below
 
         if (snapshot.isPlayerInventory) {
             // Player inventory: main inv (keys 9-35) as 3 rows, hotbar (keys 0-8) as row 4 with gap
             int cols = 9;
-            int gridWidth = cols * SLOT_SIZE;
-            int gridX = rightPanelX + (rightPanelWidth - gridWidth) / 2;
+            int mainRows = 3;
             int hotbarGap = 4;
-            int gridHeight = 3 * SLOT_SIZE + hotbarGap + SLOT_SIZE;
+            // Total height = (mainRows + 1) * slotSize + hotbarGap
+            // Solve for slotSize: slotSize = (availableHeight - hotbarGap) / (mainRows + 1)
+            int slotSize = Math.min(availableWidth / cols, (availableHeight - hotbarGap) / (mainRows + 1));
+            slotSize = Math.max(slotSize, 8); // minimum 8px per slot
+            slotSize = Math.min(slotSize, SLOT_SIZE); // don't exceed default size
+
+            int gridWidth = cols * slotSize;
+            int gridHeight = mainRows * slotSize + hotbarGap + slotSize;
+            int gridX = rightPanelX + (rightPanelWidth - gridWidth) / 2;
 
             // Draw container background
             context.fill(gridX - 4, gridY - 4, gridX + gridWidth + 4, gridY + gridHeight + 4, PANEL_BORDER);
@@ -207,16 +220,16 @@ public class ClipboardHistoryScreen extends Screen {
                 int gridIdx = i - 9; // 0-26
                 int col = gridIdx % cols;
                 int row = gridIdx / cols;
-                int sx = gridX + col * SLOT_SIZE;
-                int sy = gridY + row * SLOT_SIZE;
-                renderPreviewSlot(context, snapshot.slots.get(i), sx, sy);
+                int sx = gridX + col * slotSize;
+                int sy = gridY + row * slotSize;
+                renderPreviewSlotScaled(context, snapshot.slots.get(i), sx, sy, slotSize);
             }
 
             // Hotbar: 1 row with gap (slot keys 0-8)
-            int hotbarY = gridY + (3 * SLOT_SIZE) + hotbarGap;
+            int hotbarY = gridY + (mainRows * slotSize) + hotbarGap;
             for (int i = 0; i <= 8; i++) {
-                int sx = gridX + i * SLOT_SIZE;
-                renderPreviewSlot(context, snapshot.slots.get(i), sx, hotbarY);
+                int sx = gridX + i * slotSize;
+                renderPreviewSlotScaled(context, snapshot.slots.get(i), sx, hotbarY, slotSize);
             }
 
             gridBottomY = gridY + gridHeight;
@@ -241,8 +254,13 @@ public class ClipboardHistoryScreen extends Screen {
                 rows = (int) Math.ceil(slotCount / 9.0);
             }
 
-            int gridWidth = cols * SLOT_SIZE;
-            int gridHeight = rows * SLOT_SIZE;
+            // Calculate slot size that fits within panel bounds
+            int slotSize = Math.min(availableWidth / cols, availableHeight / rows);
+            slotSize = Math.max(slotSize, 8); // minimum 8px per slot
+            slotSize = Math.min(slotSize, SLOT_SIZE); // don't exceed default size
+
+            int gridWidth = cols * slotSize;
+            int gridHeight = rows * slotSize;
             int gridX = rightPanelX + (rightPanelWidth - gridWidth) / 2;
 
             // Draw container background
@@ -256,10 +274,10 @@ public class ClipboardHistoryScreen extends Screen {
             for (int i = 0; i < sortedSlotIds.size(); i++) {
                 int col = i % cols;
                 int row = i / cols;
-                int sx = gridX + col * SLOT_SIZE;
-                int sy = gridY + row * SLOT_SIZE;
+                int sx = gridX + col * slotSize;
+                int sy = gridY + row * slotSize;
                 int slotId = sortedSlotIds.get(i);
-                renderPreviewSlot(context, snapshot.slots.get(slotId), sx, sy);
+                renderPreviewSlotScaled(context, snapshot.slots.get(slotId), sx, sy, slotSize);
             }
 
             gridBottomY = gridY + gridHeight;
@@ -280,12 +298,14 @@ public class ClipboardHistoryScreen extends Screen {
     }
 
     /**
-     * Render a single slot in the preview grid (background + item if present).
+     * Render a single slot in the preview grid with a specified slot size.
+     * The slot is drawn as a border + interior fill, with an item icon if present.
      */
-    private void renderPreviewSlot(DrawContext context, LayoutClipboard.SlotData sd, int sx, int sy) {
-        // Draw slot background (border + dark interior)
-        context.fill(sx, sy, sx + SLOT_SIZE, sy + SLOT_SIZE, SLOT_BORDER);
-        context.fill(sx + 1, sy + 1, sx + SLOT_SIZE - 1, sy + SLOT_SIZE - 1, SLOT_BG);
+    private void renderPreviewSlotScaled(DrawContext context, LayoutClipboard.SlotData sd, int sx, int sy, int slotSize) {
+        // Draw slot background: border + interior
+        context.fill(sx, sy, sx + slotSize, sy + slotSize, SLOT_BORDER);
+        int slotInterior = (sd == null || sd.item() == null) ? 0xFF555555 : SLOT_BG;
+        context.fill(sx + 1, sy + 1, sx + slotSize - 1, sy + slotSize - 1, slotInterior);
 
         // Draw item if present
         if (sd != null && sd.item() != null) {
