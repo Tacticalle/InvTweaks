@@ -14,7 +14,12 @@ import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.EquippableComponent;
 import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.NbtHelper;
 import net.minecraft.registry.Registries;
+import net.minecraft.registry.RegistryOps;
 import net.minecraft.stat.Stats;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -30,8 +35,9 @@ public class LayoutClipboard {
 
     /**
      * A snapshot of one slot's contents.
+     * The components field stores serialized NBT component data (null for simple items or old entries).
      */
-    public record SlotData(Item item, int count) {}
+    public record SlotData(Item item, int count, String components) {}
 
     /**
      * A snapshot of a container layout.
@@ -104,8 +110,10 @@ public class LayoutClipboard {
         HistoryEntry entry = history.get(index);
         if (entry.snapshot.isPlayerInventory) {
             activePlayerIndex = index;
+            InvTweaksConfig.debugLog("CLIPBOARD", "setActiveIndex: player=%d label=%s", index, entry.label);
         } else {
             activeContainerIndex = index;
+            InvTweaksConfig.debugLog("CLIPBOARD", "setActiveIndex: container=%d label=%s", index, entry.label);
         }
         ClipboardStorage.save();
     }
@@ -229,6 +237,63 @@ public class LayoutClipboard {
         activePlayerIndex = playerIdx;
     }
 
+    // ========== COMPONENT SERIALIZATION ==========
+
+    /**
+     * Serialize an ItemStack's component data to a string, if it has non-default components.
+     * Returns null if the stack is empty or has only default components.
+     *
+     * ⚠️ UNCERTAINTY: The exact method names for CODEC encoding may vary in Yarn 1.21.11.
+     * If this doesn't compile, try the fallback chain described in batch 10a.1 notes.
+     */
+    public static String serializeComponents(ItemStack stack) {
+        if (stack.isEmpty()) return null;
+        try {
+            MinecraftClient mc = MinecraftClient.getInstance();
+            if (mc.world == null) return null;
+            RegistryOps<NbtElement> ops = RegistryOps.of(NbtOps.INSTANCE, mc.world.getRegistryManager());
+            var result = ItemStack.CODEC.encodeStart(ops, stack);
+            NbtElement nbt = result.result().orElse(null);
+            InvTweaksConfig.debugLog("CLIPBOARD", "serializeComponents: item=%s fullNbt=%s", stack.getItem(), nbt);
+            if (nbt instanceof NbtCompound compound) {
+                if (compound.contains("components")) {
+                    String comp = compound.get("components").toString();
+                    InvTweaksConfig.debugLog("CLIPBOARD", "serializeComponents: components=%s", comp);
+                    return comp;
+                }
+            }
+            InvTweaksConfig.debugLog("CLIPBOARD", "serializeComponents: no components key found, returning empty string");
+        } catch (Exception e) {
+            InvTweaksConfig.debugLog("CLIPBOARD", "Failed to serialize components: %s", e.getMessage());
+        }
+        return "";
+    }
+
+    /**
+     * Reconstruct a full ItemStack from item, count, and serialized components.
+     * Falls back to a plain ItemStack if reconstruction fails.
+     */
+    public static ItemStack reconstructStack(Item item, int count, String components) {
+        if (item == null) return ItemStack.EMPTY;
+        if (components == null) return new ItemStack(item, count);
+        try {
+            MinecraftClient mc = MinecraftClient.getInstance();
+            if (mc.world == null) return new ItemStack(item, count);
+            String itemId = Registries.ITEM.getId(item).toString();
+            String nbtStr = "{id:\"" + itemId + "\",count:" + count + ",components:" + components + "}";
+            NbtElement nbt = NbtHelper.fromNbtProviderString(nbtStr);
+            RegistryOps<NbtElement> ops = RegistryOps.of(NbtOps.INSTANCE, mc.world.getRegistryManager());
+            var result = ItemStack.CODEC.parse(ops, nbt);
+            ItemStack reconstructed = result.result().orElse(null);
+            if (reconstructed != null && !reconstructed.isEmpty()) {
+                return reconstructed;
+            }
+        } catch (Exception e) {
+            InvTweaksConfig.debugLog("CLIPBOARD", "Failed to reconstruct stack: %s", e.getMessage());
+        }
+        return new ItemStack(item, count);
+    }
+
     // ========== COPY ==========
 
     /**
@@ -252,9 +317,9 @@ public class LayoutClipboard {
                 Slot slot = handler.slots.get(i);
                 ItemStack stack = slot.getStack();
                 if (stack.isEmpty()) {
-                    slots.put(i, new SlotData(null, 0));
+                    slots.put(i, new SlotData(null, 0, null));
                 } else {
-                    slots.put(i, new SlotData(stack.getItem(), stack.getCount()));
+                    slots.put(i, new SlotData(stack.getItem(), stack.getCount(), serializeComponents(stack)));
                 }
             }
             // Hotbar: handler slots 36-44 → snapshot keys 0-8
@@ -264,9 +329,9 @@ public class LayoutClipboard {
                 ItemStack stack = slot.getStack();
                 int playerSlot = i - 36; // maps to 0-8
                 if (stack.isEmpty()) {
-                    slots.put(playerSlot, new SlotData(null, 0));
+                    slots.put(playerSlot, new SlotData(null, 0, null));
                 } else {
-                    slots.put(playerSlot, new SlotData(stack.getItem(), stack.getCount()));
+                    slots.put(playerSlot, new SlotData(stack.getItem(), stack.getCount(), serializeComponents(stack)));
                 }
             }
             // Armor: handler slots 5-8 → snapshot keys 36-39 (helmet=36, chest=37, legs=38, boots=39)
@@ -276,9 +341,9 @@ public class LayoutClipboard {
                 ItemStack stack = slot.getStack();
                 int snapshotKey = 36 + (i - 5); // 5→36, 6→37, 7→38, 8→39
                 if (stack.isEmpty()) {
-                    slots.put(snapshotKey, new SlotData(null, 0));
+                    slots.put(snapshotKey, new SlotData(null, 0, null));
                 } else {
-                    slots.put(snapshotKey, new SlotData(stack.getItem(), stack.getCount()));
+                    slots.put(snapshotKey, new SlotData(stack.getItem(), stack.getCount(), serializeComponents(stack)));
                 }
             }
             // Offhand: handler slot 45 → snapshot key 40
@@ -286,9 +351,9 @@ public class LayoutClipboard {
                 Slot slot = handler.slots.get(45);
                 ItemStack stack = slot.getStack();
                 if (stack.isEmpty()) {
-                    slots.put(40, new SlotData(null, 0));
+                    slots.put(40, new SlotData(null, 0, null));
                 } else {
-                    slots.put(40, new SlotData(stack.getItem(), stack.getCount()));
+                    slots.put(40, new SlotData(stack.getItem(), stack.getCount(), serializeComponents(stack)));
                 }
             }
         } else {
@@ -297,9 +362,9 @@ public class LayoutClipboard {
                 if (slot.inventory instanceof PlayerInventory) continue;
                 ItemStack stack = slot.getStack();
                 if (stack.isEmpty()) {
-                    slots.put(i, new SlotData(null, 0));
+                    slots.put(i, new SlotData(null, 0, null));
                 } else {
-                    slots.put(i, new SlotData(stack.getItem(), stack.getCount()));
+                    slots.put(i, new SlotData(stack.getItem(), stack.getCount(), serializeComponents(stack)));
                 }
             }
         }
@@ -332,12 +397,17 @@ public class LayoutClipboard {
 
         // Get the active clipboard entry
         int activeIndex = isPlayerOnly ? activePlayerIndex : activeContainerIndex;
+        InvTweaksConfig.debugLog("PASTE", "using clipboard entry: index=%d type=%s activeContainer=%d activePlayer=%d historySize=%d",
+                activeIndex, isPlayerOnly ? "player" : "container", activeContainerIndex, activePlayerIndex, history.size());
         if (activeIndex < 0 || activeIndex >= history.size()) {
             InvTweaksOverlay.show("No layout copied", 0xFFFF5555);
             return;
         }
 
-        LayoutSnapshot clipboard = history.get(activeIndex).snapshot;
+        HistoryEntry activeEntry = history.get(activeIndex);
+        InvTweaksConfig.debugLog("PASTE", "selected entry: label=%s isPlayer=%s slots=%d timestamp=%d",
+                activeEntry.label, activeEntry.snapshot.isPlayerInventory, activeEntry.snapshot.slotCount, activeEntry.timestamp);
+        LayoutSnapshot clipboard = activeEntry.snapshot;
 
         // Check clipboard type matches current context
         if (clipboard.isPlayerInventory != isPlayerOnly) {
@@ -488,6 +558,14 @@ public class LayoutClipboard {
                     InvTweaksConfig.debugLog("PASTE", "alreadyMatches: slot=%d clipboard=%s actual=%s", slotId, desired.item(), current.isEmpty() ? "empty" : current.getItem());
                     alreadyMatches = false; break;
                 }
+                // Also check components — two ominous bottles at different levels are NOT a match
+                if (desired.components() != null) {
+                    String currentComponents = serializeComponents(current);
+                    if (!desired.components().equals(currentComponents)) {
+                        InvTweaksConfig.debugLog("PASTE", "alreadyMatches: slot=%d type matches but components differ", slotId);
+                        alreadyMatches = false; break;
+                    }
+                }
             }
         }
         if (alreadyMatches) {
@@ -501,7 +579,7 @@ public class LayoutClipboard {
             SlotData desired = entry.getValue();
 
             // Skip armor/offhand slots if the desired item can't be equipped there
-            if (isArmorOrOffhandSlot(targetSlotId) && desired.item() != null) {
+            if (isPlayerOnly && isArmorOrOffhandSlot(targetSlotId) && desired.item() != null) {
                 if (!canEquipInSlot(desired.item(), targetSlotId)) {
                     InvTweaksConfig.debugLog("PASTE", "skipping armor/offhand slot %d: %s can't be equipped there", targetSlotId, desired.item());
                     continue;
@@ -544,14 +622,20 @@ public class LayoutClipboard {
             int maxStack = new ItemStack(desired.item()).getMaxCount();
 
             // Target should have a specific item
-            if (!currentStack.isEmpty() && currentStack.getItem() == desired.item()) {
+            boolean typeMatches = !currentStack.isEmpty() && currentStack.getItem() == desired.item();
+            boolean componentMatches = true;
+            if (typeMatches && desired.components() != null) {
+                String currentComponents = serializeComponents(currentStack);
+                componentMatches = desired.components().equals(currentComponents);
+            }
+            if (typeMatches && componentMatches) {
                 if (currentStack.getCount() >= maxStack) {
                     matchedSlots++;
                     continue;
                 }
                 // Try to fill up to max stack size
                 boolean filled = addMore(handler, im, player, targetSlotId, desired.item(),
-                        maxStack - currentStack.getCount(), allAccessibleSlots, targetLayout, isPlayerOnly);
+                        desired.components(), maxStack - currentStack.getCount(), allAccessibleSlots, targetLayout, isPlayerOnly);
                 matchedSlots++;
                 continue;
             }
@@ -572,7 +656,7 @@ public class LayoutClipboard {
             }
 
             boolean placed = sourceItem(handler, im, player, targetSlotId, desired.item(), maxStack,
-                    allAccessibleSlots, targetLayout, isPlayerOnly);
+                    desired.components(), allAccessibleSlots, targetLayout, isPlayerOnly);
             if (placed) matchedSlots++;
         }
 
@@ -639,26 +723,26 @@ public class LayoutClipboard {
         for (int i = 0; i < 36; i++) {
             ItemStack stack = inv.getStack(i);
             if (stack.isEmpty()) {
-                slots.put(i, new SlotData(null, 0));
+                slots.put(i, new SlotData(null, 0, null));
             } else {
-                slots.put(i, new SlotData(stack.getItem(), stack.getCount()));
+                slots.put(i, new SlotData(stack.getItem(), stack.getCount(), serializeComponents(stack)));
             }
         }
         // Armor: inv slots 36-39 → snapshot keys 36-39
         for (int i = 36; i <= 39; i++) {
             ItemStack stack = inv.getStack(i);
             if (stack.isEmpty()) {
-                slots.put(i, new SlotData(null, 0));
+                slots.put(i, new SlotData(null, 0, null));
             } else {
-                slots.put(i, new SlotData(stack.getItem(), stack.getCount()));
+                slots.put(i, new SlotData(stack.getItem(), stack.getCount(), serializeComponents(stack)));
             }
         }
         // Offhand: inv slot 40 → snapshot key 40
         ItemStack offhand = inv.getStack(40);
         if (offhand.isEmpty()) {
-            slots.put(40, new SlotData(null, 0));
+            slots.put(40, new SlotData(null, 0, null));
         } else {
-            slots.put(40, new SlotData(offhand.getItem(), offhand.getCount()));
+            slots.put(40, new SlotData(offhand.getItem(), offhand.getCount(), serializeComponents(offhand)));
         }
 
         boolean hasItems = false;
@@ -779,22 +863,40 @@ public class LayoutClipboard {
     }
 
     private static boolean addMore(ScreenHandler handler, ClientPlayerInteractionManager im,
-                                    PlayerEntity player, int targetSlotId, Item itemType, int needed,
+                                    PlayerEntity player, int targetSlotId, Item itemType,
+                                    String desiredComponents, int needed,
                                     Set<Integer> allAccessible, Map<Integer, SlotData> targetLayout,
                                     boolean isPlayerOnly) {
         int remaining = needed;
 
-        for (int srcSlot : allAccessible) {
-            if (srcSlot == targetSlotId) continue;
+        List<Integer> rankedSources = rankSourceSlots(handler, targetSlotId, itemType,
+                desiredComponents, allAccessible, targetLayout);
+
+        for (int srcSlot : rankedSources) {
             if (remaining <= 0) break;
 
             ItemStack srcStack = handler.slots.get(srcSlot).getStack();
             if (srcStack.isEmpty() || srcStack.getItem() != itemType) continue;
 
+            // Only exact-component matches for quantity maximization
+            if (desiredComponents != null) {
+                String srcComponents = serializeComponents(srcStack);
+                if (!desiredComponents.equals(srcComponents)) continue;
+            }
+
             int canTake = srcStack.getCount();
             SlotData srcTarget = targetLayout.get(srcSlot);
             if (srcTarget != null && srcTarget.item() == itemType) {
-                canTake = Math.max(0, srcStack.getCount() - srcTarget.count());
+                // Only protect this item if it's the right variant for this slot
+                boolean rightVariant = true;
+                if (srcTarget.components() != null) {
+                    String srcComp = serializeComponents(srcStack);
+                    rightVariant = srcTarget.components().equals(srcComp);
+                }
+                if (rightVariant) {
+                    canTake = Math.max(0, srcStack.getCount() - srcTarget.count());
+                }
+                // Wrong variant: fully available for sourcing (canTake unchanged)
             }
             if (canTake <= 0) continue;
 
@@ -839,35 +941,39 @@ public class LayoutClipboard {
 
     private static boolean sourceItem(ScreenHandler handler, ClientPlayerInteractionManager im,
                                        PlayerEntity player, int targetSlotId, Item itemType, int desiredCount,
+                                       String desiredComponents,
                                        Set<Integer> allAccessible, Map<Integer, SlotData> targetLayout,
                                        boolean isPlayerOnly) {
         int remaining = desiredCount;
 
-        List<Integer> containerSlots = new ArrayList<>();
-        List<Integer> playerSlots = new ArrayList<>();
-        for (int i : allAccessible) {
-            if (i == targetSlotId) continue;
-            Slot slot = handler.slots.get(i);
-            if (slot.inventory instanceof PlayerInventory) {
-                playerSlots.add(i);
-            } else {
-                containerSlots.add(i);
-            }
-        }
+        List<Integer> rankedSources = rankSourceSlots(handler, targetSlotId, itemType,
+                desiredComponents, allAccessible, targetLayout);
 
-        List<Integer> searchOrder = new ArrayList<>(containerSlots);
-        searchOrder.addAll(playerSlots);
-
-        for (int srcSlot : searchOrder) {
+        for (int srcSlot : rankedSources) {
             if (remaining <= 0) break;
 
             ItemStack srcStack = handler.slots.get(srcSlot).getStack();
             if (srcStack.isEmpty() || srcStack.getItem() != itemType) continue;
 
+            // Only exact-component matches when components are tracked
+            if (desiredComponents != null) {
+                String srcComponents = serializeComponents(srcStack);
+                if (!desiredComponents.equals(srcComponents)) continue;
+            }
+
             int canTake = srcStack.getCount();
             SlotData srcTarget = targetLayout.get(srcSlot);
             if (srcTarget != null && srcTarget.item() == itemType) {
-                canTake = Math.max(0, srcStack.getCount() - srcTarget.count());
+                // Only protect this item if it's the right variant for this slot
+                boolean rightVariant = true;
+                if (srcTarget.components() != null) {
+                    String srcComp = serializeComponents(srcStack);
+                    rightVariant = srcTarget.components().equals(srcComp);
+                }
+                if (rightVariant) {
+                    canTake = Math.max(0, srcStack.getCount() - srcTarget.count());
+                }
+                // Wrong variant: fully available for sourcing (canTake unchanged)
             }
             if (canTake <= 0) continue;
 
@@ -924,13 +1030,15 @@ public class LayoutClipboard {
      */
     private static boolean canEquipInSlot(Item item, int handlerSlot) {
         if (handlerSlot == 45) {
-            // Offhand accepts any item
+            InvTweaksConfig.debugLog("PASTE", "canEquipInSlot: item=%s slot=45(offhand) -> true", item);
             return true;
         }
-        // Check if item has equippable component matching the expected slot
         ItemStack testStack = new ItemStack(item);
         EquippableComponent equippable = testStack.get(DataComponentTypes.EQUIPPABLE);
-        if (equippable == null) return false;
+        if (equippable == null) {
+            InvTweaksConfig.debugLog("PASTE", "canEquipInSlot: item=%s slot=%d -> false (no EQUIPPABLE component)", item, handlerSlot);
+            return false;
+        }
 
         EquipmentSlot expected;
         switch (handlerSlot) {
@@ -938,9 +1046,73 @@ public class LayoutClipboard {
             case 6: expected = EquipmentSlot.CHEST; break;
             case 7: expected = EquipmentSlot.LEGS; break;
             case 8: expected = EquipmentSlot.FEET; break;
-            default: return false;
+            default:
+                InvTweaksConfig.debugLog("PASTE", "canEquipInSlot: item=%s slot=%d -> false (unknown slot)", item, handlerSlot);
+                return false;
         }
-        return equippable.slot() == expected;
+        boolean result = equippable.slot() == expected;
+        InvTweaksConfig.debugLog("PASTE", "canEquipInSlot: item=%s slot=%d expected=%s actual=%s -> %s",
+                item, handlerSlot, expected, equippable.slot(), result);
+        return result;
+    }
+
+    // ========== SOURCE RANKING (Fixes 3 + 5) ==========
+
+    /**
+     * Rank source slots for item sourcing, combining identity matching (Fix 3)
+     * and not-in-target-position preference (Fix 5).
+     *
+     * Tier 0: Exact component match AND not in its target position (best)
+     * Tier 1: Exact component match AND in its target position
+     * Tier 2: Type-only match AND not in its target position
+     * Tier 3: Type-only match AND in its target position (worst)
+     *
+     * Within each tier, slots are sorted by handler index within the same side
+     * (container slots before player slots, lowest index first within each side).
+     */
+    private static List<Integer> rankSourceSlots(ScreenHandler handler, int targetSlotId,
+                                                  Item itemType, String desiredComponents,
+                                                  Set<Integer> allAccessible,
+                                                  Map<Integer, SlotData> targetLayout) {
+        List<int[]> candidates = new ArrayList<>();
+
+        for (int srcSlot : allAccessible) {
+            if (srcSlot == targetSlotId) continue;
+            ItemStack srcStack = handler.slots.get(srcSlot).getStack();
+            if (srcStack.isEmpty() || srcStack.getItem() != itemType) continue;
+
+            boolean inTargetPosition = false;
+            SlotData srcTarget = targetLayout.get(srcSlot);
+            if (srcTarget != null && srcTarget.item() == itemType) {
+                inTargetPosition = true;
+            }
+
+            boolean exactMatch = false;
+            if (desiredComponents != null) {
+                String srcComponents = serializeComponents(srcStack);
+                exactMatch = desiredComponents.equals(srcComponents);
+            }
+
+            int tier;
+            if (exactMatch && !inTargetPosition) tier = 0;
+            else if (exactMatch) tier = 1;
+            else if (!inTargetPosition) tier = 2;
+            else tier = 3;
+
+            candidates.add(new int[]{srcSlot, tier});
+        }
+
+        candidates.sort((a, b) -> {
+            if (a[1] != b[1]) return a[1] - b[1];
+            boolean aIsPlayer = handler.slots.get(a[0]).inventory instanceof PlayerInventory;
+            boolean bIsPlayer = handler.slots.get(b[0]).inventory instanceof PlayerInventory;
+            if (aIsPlayer != bIsPlayer) return aIsPlayer ? 1 : -1;
+            return a[0] - b[0];
+        });
+
+        List<Integer> result = new ArrayList<>();
+        for (int[] c : candidates) result.add(c[0]);
+        return result;
     }
 
     // ========== SLOT FINDING HELPERS ==========

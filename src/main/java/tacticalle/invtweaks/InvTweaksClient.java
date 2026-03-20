@@ -23,7 +23,7 @@ public class InvTweaksClient implements ClientModInitializer {
 
     // Death detection state
     private static boolean wasAlive = true;
-    private static java.util.Map<Integer, LayoutClipboard.SlotData> cachedInventory = null;
+    private static java.util.Map<Integer, net.minecraft.item.ItemStack> cachedInventoryStacks = null;
 
     @Override
     public void onInitializeClient() {
@@ -51,46 +51,49 @@ public class InvTweaksClient implements ClientModInitializer {
                 boolean isAlive = client.player.isAlive();
 
                 if (isAlive) {
-                    // Cache inventory snapshot every tick while alive (keys 0-40)
-                    cachedInventory = new java.util.LinkedHashMap<>();
+                    // Cache inventory ItemStack copies every tick while alive
+                    cachedInventoryStacks = new java.util.LinkedHashMap<>();
                     net.minecraft.entity.player.PlayerInventory inv = client.player.getInventory();
-                    // Main inventory (keys 9-35) and hotbar (keys 0-8)
+                    // Main inventory (keys 0-35) and hotbar
                     for (int i = 0; i < 36; i++) {
-                        net.minecraft.item.ItemStack stack = inv.getStack(i);
-                        if (stack.isEmpty()) {
-                            cachedInventory.put(i, new LayoutClipboard.SlotData(null, 0));
-                        } else {
-                            cachedInventory.put(i, new LayoutClipboard.SlotData(stack.getItem(), stack.getCount()));
-                        }
+                        cachedInventoryStacks.put(i, inv.getStack(i).copy());
                     }
-                    // Armor: inv slots 36-39 → snapshot keys 36-39
+                    // Armor: inv slots 36-39
                     for (int i = 36; i <= 39; i++) {
-                        net.minecraft.item.ItemStack stack = inv.getStack(i);
-                        if (stack.isEmpty()) {
-                            cachedInventory.put(i, new LayoutClipboard.SlotData(null, 0));
-                        } else {
-                            cachedInventory.put(i, new LayoutClipboard.SlotData(stack.getItem(), stack.getCount()));
-                        }
+                        cachedInventoryStacks.put(i, inv.getStack(i).copy());
                     }
-                    // Offhand: inv slot 40 → snapshot key 40
-                    net.minecraft.item.ItemStack offhand = inv.getStack(40);
-                    if (offhand.isEmpty()) {
-                        cachedInventory.put(40, new LayoutClipboard.SlotData(null, 0));
-                    } else {
-                        cachedInventory.put(40, new LayoutClipboard.SlotData(offhand.getItem(), offhand.getCount()));
-                    }
+                    // Offhand: inv slot 40
+                    cachedInventoryStacks.put(40, inv.getStack(40).copy());
                 }
 
-                if (wasAlive && !isAlive && cachedInventory != null) {
-                    // Player just died — use the CACHED inventory (last known alive state)
+                if (wasAlive && !isAlive && cachedInventoryStacks != null) {
+                    // Player just died — convert cached stacks to SlotData with component serialization
                     InvTweaksConfig.debugLog("DEATH", "Player died, auto-copying cached inventory layout");
-                    LayoutClipboard.autoSaveFromCache(cachedInventory);
-                    cachedInventory = null;
+                    java.util.Map<Integer, LayoutClipboard.SlotData> slotDataMap = new java.util.LinkedHashMap<>();
+                    for (java.util.Map.Entry<Integer, net.minecraft.item.ItemStack> entry : cachedInventoryStacks.entrySet()) {
+                        int invSlot = entry.getKey();
+                        net.minecraft.item.ItemStack stack = entry.getValue();
+                        // Fix armor key mapping: PlayerInventory slot 36(FEET)→snapshot 39,
+                        // 37(LEGS)→38, 38(CHEST)→37, 39(HEAD)→36
+                        // This matches copyLayout where handler slot 5(HEAD)→key 36, 8(FEET)→key 39
+                        int snapshotKey = invSlot;
+                        if (invSlot >= 36 && invSlot <= 39) {
+                            snapshotKey = 75 - invSlot;
+                        }
+                        if (stack.isEmpty()) {
+                            slotDataMap.put(snapshotKey, new LayoutClipboard.SlotData(null, 0, null));
+                        } else {
+                            String components = LayoutClipboard.serializeComponents(stack);
+                            slotDataMap.put(snapshotKey, new LayoutClipboard.SlotData(stack.getItem(), stack.getCount(), components));
+                        }
+                    }
+                    LayoutClipboard.autoSaveFromCache(slotDataMap);
+                    cachedInventoryStacks = null;
                 }
                 wasAlive = isAlive;
             } else {
                 wasAlive = true;
-                cachedInventory = null;
+                cachedInventoryStacks = null;
             }
         });
 

@@ -359,7 +359,7 @@ public class ClipboardHistoryScreen extends Screen {
 
         // Draw item if present, scaled to match slot size
         if (!empty) {
-            ItemStack displayStack = new ItemStack(sd.item(), sd.count());
+            ItemStack displayStack = LayoutClipboard.reconstructStack(sd.item(), sd.count(), sd.components());
             // Draw item at slot position — 16x16 native size, centered if slot is larger
             int itemX = sx + 1 + Math.max(0, (slotSize - 2 - 16) / 2);
             int itemY = sy + 1 + Math.max(0, (slotSize - 2 - 16) / 2);

@@ -51,6 +51,9 @@ public class ClipboardStorage {
                         JsonObject slotObj = new JsonObject();
                         slotObj.addProperty("item", Registries.ITEM.getId(sd.item()).toString());
                         slotObj.addProperty("count", sd.count());
+                        if (sd.components() != null) {
+                            slotObj.addProperty("components", sd.components());
+                        }
                         slotsObj.add(String.valueOf(slotEntry.getKey()), slotObj);
                     }
                 }
@@ -107,7 +110,7 @@ public class ClipboardStorage {
                             int slotIndex = Integer.parseInt(slotEntry.getKey());
                             JsonElement slotElem = slotEntry.getValue();
                             if (slotElem.isJsonNull()) {
-                                slots.put(slotIndex, new LayoutClipboard.SlotData(null, 0));
+                                slots.put(slotIndex, new LayoutClipboard.SlotData(null, 0, null));
                             } else {
                                 JsonObject slotObj = slotElem.getAsJsonObject();
                                 String itemId = slotObj.get("item").getAsString();
@@ -116,9 +119,10 @@ public class ClipboardStorage {
                                 // If item doesn't exist (mod removed), use air
                                 if (item == Items.AIR && !itemId.equals("minecraft:air")) {
                                     LOGGER.warn("InvTweaks: Unknown item '{}' in clipboard history, skipping slot", itemId);
-                                    slots.put(slotIndex, new LayoutClipboard.SlotData(null, 0));
+                                    slots.put(slotIndex, new LayoutClipboard.SlotData(null, 0, null));
                                 } else {
-                                    slots.put(slotIndex, new LayoutClipboard.SlotData(item, count));
+                                    String components = slotObj.has("components") ? slotObj.get("components").getAsString() : null;
+                                    slots.put(slotIndex, new LayoutClipboard.SlotData(item, count, components));
                                 }
                             }
                         }

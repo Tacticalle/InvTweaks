@@ -531,6 +531,14 @@ public abstract class HandledScreenMixin {
 
         // Determine scroll mode (flush / leave1 / null)
         String scrollMode = config.getScrollTransferMode();
+        InvTweaksConfig.debugLog("SCROLL", "decision | mode=%s | focusedSlot=%d | item=%s | count=%d | slotIsPlayer=%s | leave1KeyHeld=%s | verticalAmt=%.1f",
+                scrollMode != null ? scrollMode : "none",
+                focusedSlot != null ? focusedSlot.id : -1,
+                hoveredStack.getItem(),
+                hoveredStack.getCount(),
+                focusedSlot != null ? String.valueOf(focusedSlot.inventory instanceof net.minecraft.entity.player.PlayerInventory) : "null",
+                String.valueOf(config.isKeyPressed(config.scrollLeave1Key)),
+                verticalAmount);
         if (scrollMode == null) return;
 
         // Determine scroll direction
