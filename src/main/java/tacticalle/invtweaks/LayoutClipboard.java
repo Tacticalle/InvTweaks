@@ -11,8 +11,13 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.EquippableComponent;
+import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.registry.Registries;
 import net.minecraft.stat.Stats;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
@@ -241,7 +246,7 @@ public class LayoutClipboard {
         Map<Integer, SlotData> slots = new LinkedHashMap<>();
 
         if (isPlayerOnly) {
-            // Main inventory: handler slots 9-35 → player inventory slots 9-35
+            // Main inventory: handler slots 9-35 → snapshot keys 9-35
             for (int i = 9; i <= 35; i++) {
                 if (i >= handler.slots.size()) break;
                 Slot slot = handler.slots.get(i);
@@ -252,7 +257,7 @@ public class LayoutClipboard {
                     slots.put(i, new SlotData(stack.getItem(), stack.getCount()));
                 }
             }
-            // Hotbar: handler slots 36-44 → player inventory slots 0-8
+            // Hotbar: handler slots 36-44 → snapshot keys 0-8
             for (int i = 36; i <= 44; i++) {
                 if (i >= handler.slots.size()) break;
                 Slot slot = handler.slots.get(i);
@@ -262,6 +267,28 @@ public class LayoutClipboard {
                     slots.put(playerSlot, new SlotData(null, 0));
                 } else {
                     slots.put(playerSlot, new SlotData(stack.getItem(), stack.getCount()));
+                }
+            }
+            // Armor: handler slots 5-8 → snapshot keys 36-39 (helmet=36, chest=37, legs=38, boots=39)
+            for (int i = 5; i <= 8; i++) {
+                if (i >= handler.slots.size()) break;
+                Slot slot = handler.slots.get(i);
+                ItemStack stack = slot.getStack();
+                int snapshotKey = 36 + (i - 5); // 5→36, 6→37, 7→38, 8→39
+                if (stack.isEmpty()) {
+                    slots.put(snapshotKey, new SlotData(null, 0));
+                } else {
+                    slots.put(snapshotKey, new SlotData(stack.getItem(), stack.getCount()));
+                }
+            }
+            // Offhand: handler slot 45 → snapshot key 40
+            if (45 < handler.slots.size()) {
+                Slot slot = handler.slots.get(45);
+                ItemStack stack = slot.getStack();
+                if (stack.isEmpty()) {
+                    slots.put(40, new SlotData(null, 0));
+                } else {
+                    slots.put(40, new SlotData(stack.getItem(), stack.getCount()));
                 }
             }
         } else {
@@ -340,11 +367,17 @@ public class LayoutClipboard {
                 int clipKey = clipEntry.getKey();
                 int handlerSlot;
                 if (clipKey >= 0 && clipKey <= 8) {
-                    // Hotbar: player inv slot 0-8 → handler slot 36-44
+                    // Hotbar: snapshot key 0-8 → handler slot 36-44
                     handlerSlot = clipKey + 36;
                 } else if (clipKey >= 9 && clipKey <= 35) {
-                    // Main inventory: player inv slot 9-35 → handler slot 9-35
+                    // Main inventory: snapshot key 9-35 → handler slot 9-35
                     handlerSlot = clipKey;
+                } else if (clipKey >= 36 && clipKey <= 39) {
+                    // Armor: snapshot key 36-39 → handler slot 5-8
+                    handlerSlot = clipKey - 36 + 5;
+                } else if (clipKey == 40) {
+                    // Offhand: snapshot key 40 → handler slot 45
+                    handlerSlot = 45;
                 } else {
                     continue; // unknown slot key, skip
                 }
@@ -437,16 +470,22 @@ public class LayoutClipboard {
 
         int matchedSlots = 0;
 
-        // Quick check: is the layout already matching?
+        // Quick check: is the layout already matching? (checks item TYPE only, not count)
         boolean alreadyMatches = true;
         for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
             int slotId = entry.getKey();
             SlotData desired = entry.getValue();
             ItemStack current = handler.slots.get(slotId).getStack();
             if (desired.item() == null) {
-                if (!current.isEmpty()) { alreadyMatches = false; break; }
+                // Clipboard says empty — only fail if slot has an item that IS in the clipboard layout
+                // (non-layout items are left alone by paste, so they don't count as a mismatch)
+                if (!current.isEmpty() && clipboardItemTypes.contains(current.getItem())) {
+                    InvTweaksConfig.debugLog("PASTE", "alreadyMatches: slot=%d should be empty but has layout item %s", slotId, current.getItem());
+                    alreadyMatches = false; break;
+                }
             } else {
-                if (current.isEmpty() || current.getItem() != desired.item() || current.getCount() != desired.count()) {
+                if (current.isEmpty() || current.getItem() != desired.item()) {
+                    InvTweaksConfig.debugLog("PASTE", "alreadyMatches: slot=%d clipboard=%s actual=%s", slotId, desired.item(), current.isEmpty() ? "empty" : current.getItem());
                     alreadyMatches = false; break;
                 }
             }
@@ -460,6 +499,14 @@ public class LayoutClipboard {
         for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
             int targetSlotId = entry.getKey();
             SlotData desired = entry.getValue();
+
+            // Skip armor/offhand slots if the desired item can't be equipped there
+            if (isArmorOrOffhandSlot(targetSlotId) && desired.item() != null) {
+                if (!canEquipInSlot(desired.item(), targetSlotId)) {
+                    InvTweaksConfig.debugLog("PASTE", "skipping armor/offhand slot %d: %s can't be equipped there", targetSlotId, desired.item());
+                    continue;
+                }
+            }
 
             // Safety: if cursor has items from mod operations, try to put them away first
             if (!handler.getCursorStack().isEmpty()) {
@@ -493,21 +540,19 @@ public class LayoutClipboard {
                 continue;
             }
 
+            // Fix 5: Paste quantity maximization — fill to max stack size, not clipboard count
+            int maxStack = new ItemStack(desired.item()).getMaxCount();
+
             // Target should have a specific item
             if (!currentStack.isEmpty() && currentStack.getItem() == desired.item()) {
-                if (currentStack.getCount() == desired.count()) {
+                if (currentStack.getCount() >= maxStack) {
                     matchedSlots++;
                     continue;
                 }
-                if (currentStack.getCount() > desired.count()) {
-                    removeExcess(handler, im, player, targetSlotId, currentStack.getCount() - desired.count(),
-                            allAccessibleSlots, targetLayout, isPlayerOnly);
-                    matchedSlots++;
-                } else {
-                    boolean filled = addMore(handler, im, player, targetSlotId, desired.item(),
-                            desired.count() - currentStack.getCount(), allAccessibleSlots, targetLayout, isPlayerOnly);
-                    matchedSlots++;
-                }
+                // Try to fill up to max stack size
+                boolean filled = addMore(handler, im, player, targetSlotId, desired.item(),
+                        maxStack - currentStack.getCount(), allAccessibleSlots, targetLayout, isPlayerOnly);
+                matchedSlots++;
                 continue;
             }
 
@@ -526,7 +571,7 @@ public class LayoutClipboard {
                 }
             }
 
-            boolean placed = sourceItem(handler, im, player, targetSlotId, desired.item(), desired.count(),
+            boolean placed = sourceItem(handler, im, player, targetSlotId, desired.item(), maxStack,
                     allAccessibleSlots, targetLayout, isPlayerOnly);
             if (placed) matchedSlots++;
         }
@@ -590,6 +635,7 @@ public class LayoutClipboard {
     public static void autoSavePlayerInventoryOnDeath(PlayerEntity player) {
         Map<Integer, SlotData> slots = new LinkedHashMap<>();
         PlayerInventory inv = player.getInventory();
+        // Main inventory + hotbar (keys 0-35)
         for (int i = 0; i < 36; i++) {
             ItemStack stack = inv.getStack(i);
             if (stack.isEmpty()) {
@@ -597,6 +643,22 @@ public class LayoutClipboard {
             } else {
                 slots.put(i, new SlotData(stack.getItem(), stack.getCount()));
             }
+        }
+        // Armor: inv slots 36-39 → snapshot keys 36-39
+        for (int i = 36; i <= 39; i++) {
+            ItemStack stack = inv.getStack(i);
+            if (stack.isEmpty()) {
+                slots.put(i, new SlotData(null, 0));
+            } else {
+                slots.put(i, new SlotData(stack.getItem(), stack.getCount()));
+            }
+        }
+        // Offhand: inv slot 40 → snapshot key 40
+        ItemStack offhand = inv.getStack(40);
+        if (offhand.isEmpty()) {
+            slots.put(40, new SlotData(null, 0));
+        } else {
+            slots.put(40, new SlotData(offhand.getItem(), offhand.getCount()));
         }
 
         boolean hasItems = false;
@@ -847,15 +909,73 @@ public class LayoutClipboard {
         return remaining < desiredCount;
     }
 
+    // ========== ARMOR/EQUIPMENT HELPERS ==========
+
+    /**
+     * Check if a handler slot is an armor or offhand slot (handler slots 5-8 or 45 in player inventory).
+     */
+    private static boolean isArmorOrOffhandSlot(int handlerSlot) {
+        return (handlerSlot >= 5 && handlerSlot <= 8) || handlerSlot == 45;
+    }
+
+    /**
+     * Check if an item can be equipped in the given armor/offhand handler slot.
+     * Handler slot 5 = helmet, 6 = chestplate, 7 = leggings, 8 = boots, 45 = offhand.
+     */
+    private static boolean canEquipInSlot(Item item, int handlerSlot) {
+        if (handlerSlot == 45) {
+            // Offhand accepts any item
+            return true;
+        }
+        // Check if item has equippable component matching the expected slot
+        ItemStack testStack = new ItemStack(item);
+        EquippableComponent equippable = testStack.get(DataComponentTypes.EQUIPPABLE);
+        if (equippable == null) return false;
+
+        EquipmentSlot expected;
+        switch (handlerSlot) {
+            case 5: expected = EquipmentSlot.HEAD; break;
+            case 6: expected = EquipmentSlot.CHEST; break;
+            case 7: expected = EquipmentSlot.LEGS; break;
+            case 8: expected = EquipmentSlot.FEET; break;
+            default: return false;
+        }
+        return equippable.slot() == expected;
+    }
+
     // ========== SLOT FINDING HELPERS ==========
+
+    /**
+     * Check if a handler slot is a hotbar slot.
+     * For player inventory screens: handler slots 36-44 are hotbar.
+     * For container screens: slots whose inventory index is 0-8 in PlayerInventory are hotbar.
+     */
+    private static boolean isHotbarSlot(ScreenHandler handler, int slotId) {
+        if (slotId < 0 || slotId >= handler.slots.size()) return false;
+        Slot slot = handler.slots.get(slotId);
+        if (slot.inventory instanceof PlayerInventory) {
+            int invIdx = slot.getIndex();
+            return invIdx >= 0 && invIdx <= 8;
+        }
+        return false;
+    }
 
     private static int findEmptyNonTargetSlot(ScreenHandler handler, Set<Integer> allAccessible,
                                                Map<Integer, SlotData> targetLayout, int excludeSlot) {
+        // First pass: non-target, non-hotbar empty slots
+        for (int i : allAccessible) {
+            if (i == excludeSlot) continue;
+            if (targetLayout.containsKey(i)) continue;
+            if (isHotbarSlot(handler, i)) continue;
+            if (handler.slots.get(i).getStack().isEmpty()) return i;
+        }
+        // Second pass: non-target hotbar empty slots (fallback)
         for (int i : allAccessible) {
             if (i == excludeSlot) continue;
             if (targetLayout.containsKey(i)) continue;
             if (handler.slots.get(i).getStack().isEmpty()) return i;
         }
+        // Third pass: target slots that want to be empty
         for (int i : allAccessible) {
             if (i == excludeSlot) continue;
             SlotData target = targetLayout.get(i);
@@ -869,6 +989,13 @@ public class LayoutClipboard {
     }
 
     private static int findAnyEmptySlot(ScreenHandler handler, Set<Integer> allAccessible, int excludeSlot) {
+        // Prefer non-hotbar slots first
+        for (int i : allAccessible) {
+            if (i == excludeSlot) continue;
+            if (isHotbarSlot(handler, i)) continue;
+            if (handler.slots.get(i).getStack().isEmpty()) return i;
+        }
+        // Fallback: hotbar slots
         for (int i : allAccessible) {
             if (i == excludeSlot) continue;
             if (handler.slots.get(i).getStack().isEmpty()) return i;

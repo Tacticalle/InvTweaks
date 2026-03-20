@@ -14,9 +14,12 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.input.KeyInput;
+
+import net.minecraft.item.tooltip.TooltipType;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -41,8 +44,13 @@ public class ClipboardHistoryScreen extends Screen {
 
     private static final int SLOT_BG = 0xFF373737;
     private static final int SLOT_BORDER = 0xFF8B8B8B;
+    private static final int SLOT_EMPTY_BG = 0xFF4A4A4A;
+    private static final int SLOT_EMPTY_BORDER = 0xFF2A2A2A;
     private static final int PANEL_BG = 0xFF2B2B2B;
     private static final int PANEL_BORDER = 0xFF555555;
+
+    /** Tracks a rendered preview slot's screen bounds and item for hover tooltip. */
+    private record PreviewSlotInfo(int x, int y, int size, ItemStack stack) {}
 
     private final Screen parentScreen;
     private final ScreenHandler handler;
@@ -178,6 +186,9 @@ public class ClipboardHistoryScreen extends Screen {
         LayoutClipboard.HistoryEntry entry = history.get(previewIndex);
         LayoutClipboard.LayoutSnapshot snapshot = entry.snapshot;
 
+        // Track rendered slots for hover tooltips
+        List<PreviewSlotInfo> previewSlots = new ArrayList<>();
+
         // Label
         context.drawCenteredTextWithShadow(this.textRenderer, Text.literal(entry.label),
                 rightPanelX + rightPanelWidth / 2, panelTop + 8, WHITE);
@@ -197,18 +208,26 @@ public class ClipboardHistoryScreen extends Screen {
         int availableHeight = panelBottom - gridY - 20 - panelPadding; // 20px reserved for summary text below
 
         if (snapshot.isPlayerInventory) {
-            // Player inventory: main inv (keys 9-35) as 3 rows, hotbar (keys 0-8) as row 4 with gap
+            // Player inventory layout:
+            // Row 0-2: Main inventory (keys 9-35), 9 columns
+            // Gap (4px)
+            // Row 3: Hotbar (keys 0-8), 9 columns
+            // Gap (4px)
+            // Row 4: Armor (keys 36-39) as 4 slots + gap + Offhand (key 40) as 1 slot
             int cols = 9;
             int mainRows = 3;
-            int hotbarGap = 4;
-            // Total height = (mainRows + 1) * slotSize + hotbarGap
-            // Solve for slotSize: slotSize = (availableHeight - hotbarGap) / (mainRows + 1)
-            int slotSize = Math.min(availableWidth / cols, (availableHeight - hotbarGap) / (mainRows + 1));
+            int gap = 4;
+            boolean hasArmorOffhand = snapshot.slots.containsKey(36) || snapshot.slots.containsKey(40);
+            int totalRows = mainRows + 1 + (hasArmorOffhand ? 1 : 0);
+            int totalGaps = hasArmorOffhand ? 2 : 1;
+
+            // Solve for slotSize: totalRows * slotSize + totalGaps * gap <= availableHeight
+            int slotSize = Math.min(availableWidth / cols, (availableHeight - totalGaps * gap) / totalRows);
             slotSize = Math.max(slotSize, 8); // minimum 8px per slot
             slotSize = Math.min(slotSize, SLOT_SIZE); // don't exceed default size
 
             int gridWidth = cols * slotSize;
-            int gridHeight = mainRows * slotSize + hotbarGap + slotSize;
+            int gridHeight = totalRows * slotSize + totalGaps * gap;
             int gridX = rightPanelX + (rightPanelWidth - gridWidth) / 2;
 
             // Draw container background
@@ -222,14 +241,30 @@ public class ClipboardHistoryScreen extends Screen {
                 int row = gridIdx / cols;
                 int sx = gridX + col * slotSize;
                 int sy = gridY + row * slotSize;
-                renderPreviewSlotScaled(context, snapshot.slots.get(i), sx, sy, slotSize);
+                renderPreviewSlotScaled(context, snapshot.slots.get(i), sx, sy, slotSize, previewSlots);
             }
 
             // Hotbar: 1 row with gap (slot keys 0-8)
-            int hotbarY = gridY + (mainRows * slotSize) + hotbarGap;
+            int hotbarY = gridY + (mainRows * slotSize) + gap;
             for (int i = 0; i <= 8; i++) {
                 int sx = gridX + i * slotSize;
-                renderPreviewSlotScaled(context, snapshot.slots.get(i), sx, hotbarY, slotSize);
+                renderPreviewSlotScaled(context, snapshot.slots.get(i), sx, hotbarY, slotSize, previewSlots);
+            }
+
+            // Armor + Offhand row (if present)
+            if (hasArmorOffhand) {
+                int armorY = hotbarY + slotSize + gap;
+                // Armor: keys 36-39 (4 slots, left-aligned)
+                for (int i = 36; i <= 39; i++) {
+                    int col = i - 36;
+                    int sx = gridX + col * slotSize;
+                    renderPreviewSlotScaled(context, snapshot.slots.get(i), sx, armorY, slotSize, previewSlots);
+                }
+                // Offhand: key 40 (1 slot, after a gap of 1 slot)
+                if (snapshot.slots.containsKey(40)) {
+                    int offhandX = gridX + 5 * slotSize; // skip 1 slot gap after armor
+                    renderPreviewSlotScaled(context, snapshot.slots.get(40), offhandX, armorY, slotSize, previewSlots);
+                }
             }
 
             gridBottomY = gridY + gridHeight;
@@ -277,41 +312,64 @@ public class ClipboardHistoryScreen extends Screen {
                 int sx = gridX + col * slotSize;
                 int sy = gridY + row * slotSize;
                 int slotId = sortedSlotIds.get(i);
-                renderPreviewSlotScaled(context, snapshot.slots.get(slotId), sx, sy, slotSize);
+                renderPreviewSlotScaled(context, snapshot.slots.get(slotId), sx, sy, slotSize, previewSlots);
             }
 
             gridBottomY = gridY + gridHeight;
         }
 
-        // Show item count summary below grid
-        int itemCount = 0;
-        int stackCount = 0;
+        // Show item count summary below grid (Fix 6: "X/Y slots taken" format)
+        int nonEmptyCount = 0;
+        int totalSlots = snapshot.slots.size();
         for (LayoutClipboard.SlotData sd : snapshot.slots.values()) {
             if (sd != null && sd.item() != null) {
-                stackCount++;
-                itemCount += sd.count();
+                nonEmptyCount++;
             }
         }
-        String summary = stackCount + " stacks, " + itemCount + " items";
+        String summary = nonEmptyCount + "/" + totalSlots + " slots taken";
         context.drawCenteredTextWithShadow(this.textRenderer, Text.literal(summary),
                 rightPanelX + rightPanelWidth / 2, gridBottomY + 10, DARK_GRAY);
+
+        // Render hover tooltip (drawn last so it's on top of everything)
+        for (PreviewSlotInfo slotInfo : previewSlots) {
+            if (mouseX >= slotInfo.x && mouseX < slotInfo.x + slotInfo.size
+                    && mouseY >= slotInfo.y && mouseY < slotInfo.y + slotInfo.size) {
+                context.drawTooltip(this.textRenderer,
+                        slotInfo.stack.getTooltip(Item.TooltipContext.DEFAULT, null, TooltipType.BASIC),
+                        mouseX, mouseY);
+                break;
+            }
+        }
     }
 
     /**
      * Render a single slot in the preview grid with a specified slot size.
-     * The slot is drawn as a border + interior fill, with an item icon if present.
+     * The slot is drawn as a border + interior fill, with a scaled item icon if present.
+     * If previewSlots is non-null, the slot info is recorded for hover tooltip detection.
      */
-    private void renderPreviewSlotScaled(DrawContext context, LayoutClipboard.SlotData sd, int sx, int sy, int slotSize) {
-        // Draw slot background: border + interior
-        context.fill(sx, sy, sx + slotSize, sy + slotSize, SLOT_BORDER);
-        int slotInterior = (sd == null || sd.item() == null) ? 0xFF555555 : SLOT_BG;
-        context.fill(sx + 1, sy + 1, sx + slotSize - 1, sy + slotSize - 1, slotInterior);
+    private void renderPreviewSlotScaled(DrawContext context, LayoutClipboard.SlotData sd, int sx, int sy, int slotSize,
+                                          List<PreviewSlotInfo> previewSlots) {
+        boolean empty = (sd == null || sd.item() == null);
 
-        // Draw item if present
-        if (sd != null && sd.item() != null) {
+        // Draw slot background: border + interior (different colors for empty vs filled)
+        int borderColor = empty ? SLOT_EMPTY_BORDER : SLOT_BORDER;
+        int interiorColor = empty ? SLOT_EMPTY_BG : SLOT_BG;
+        context.fill(sx, sy, sx + slotSize, sy + slotSize, borderColor);
+        context.fill(sx + 1, sy + 1, sx + slotSize - 1, sy + slotSize - 1, interiorColor);
+
+        // Draw item if present, scaled to match slot size
+        if (!empty) {
             ItemStack displayStack = new ItemStack(sd.item(), sd.count());
-            context.drawItem(displayStack, sx + 1, sy + 1);
-            context.drawStackOverlay(this.textRenderer, displayStack, sx + 1, sy + 1);
+            // Draw item at slot position — 16x16 native size, centered if slot is larger
+            int itemX = sx + 1 + Math.max(0, (slotSize - 2 - 16) / 2);
+            int itemY = sy + 1 + Math.max(0, (slotSize - 2 - 16) / 2);
+            context.drawItem(displayStack, itemX, itemY);
+            context.drawStackOverlay(this.textRenderer, displayStack, itemX, itemY);
+
+            // Track for tooltip
+            if (previewSlots != null) {
+                previewSlots.add(new PreviewSlotInfo(sx, sy, slotSize, displayStack));
+            }
         }
     }
 

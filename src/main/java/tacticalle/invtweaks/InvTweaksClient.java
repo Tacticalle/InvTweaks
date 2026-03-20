@@ -51,9 +51,10 @@ public class InvTweaksClient implements ClientModInitializer {
                 boolean isAlive = client.player.isAlive();
 
                 if (isAlive) {
-                    // Cache inventory snapshot every tick while alive
+                    // Cache inventory snapshot every tick while alive (keys 0-40)
                     cachedInventory = new java.util.LinkedHashMap<>();
                     net.minecraft.entity.player.PlayerInventory inv = client.player.getInventory();
+                    // Main inventory (keys 9-35) and hotbar (keys 0-8)
                     for (int i = 0; i < 36; i++) {
                         net.minecraft.item.ItemStack stack = inv.getStack(i);
                         if (stack.isEmpty()) {
@@ -61,6 +62,22 @@ public class InvTweaksClient implements ClientModInitializer {
                         } else {
                             cachedInventory.put(i, new LayoutClipboard.SlotData(stack.getItem(), stack.getCount()));
                         }
+                    }
+                    // Armor: inv slots 36-39 → snapshot keys 36-39
+                    for (int i = 36; i <= 39; i++) {
+                        net.minecraft.item.ItemStack stack = inv.getStack(i);
+                        if (stack.isEmpty()) {
+                            cachedInventory.put(i, new LayoutClipboard.SlotData(null, 0));
+                        } else {
+                            cachedInventory.put(i, new LayoutClipboard.SlotData(stack.getItem(), stack.getCount()));
+                        }
+                    }
+                    // Offhand: inv slot 40 → snapshot key 40
+                    net.minecraft.item.ItemStack offhand = inv.getStack(40);
+                    if (offhand.isEmpty()) {
+                        cachedInventory.put(40, new LayoutClipboard.SlotData(null, 0));
+                    } else {
+                        cachedInventory.put(40, new LayoutClipboard.SlotData(offhand.getItem(), offhand.getCount()));
                     }
                 }
 
