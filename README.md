@@ -1,6 +1,6 @@
 # InvTweaks
 
-A Fabric mod for Minecraft that gives you precise control over how many items you pick up, transfer, and insert. Hold modifier keys while clicking to leave one behind, take exactly one, and manage bundles.
+A Fabric mod for Minecraft that gives you precise control over how many items you pick up, transfer, throw, and manage. Hold modifier keys while clicking to leave one behind, take exactly one, throw half a stack, fill existing stacks, transfer items by scrolling, and copy/paste container layouts.
 
 ## Features
 
@@ -8,9 +8,17 @@ A Fabric mod for Minecraft that gives you precise control over how many items yo
 - **Only 1** — Hold a second modifier key (default: `Alt`) to pick up or transfer exactly one item
 - **Shift+Click Transfer** — Both modes work with shift-click quick-move between inventories and containers
 - **Bundle Support** — Extract from and insert into bundles with the same modifier controls
-- **Configurable Keys** — Rebind both modifier keys to whatever you prefer
+- **Throw Half** — Hold a modifier key (default: `Alt`) + Q to throw half a stack, both in-GUI and first-person
+- **Throw All But 1** — Hold a modifier key (default: `Ctrl`) + Q to throw all but one item
+- **Hotbar Modifiers** — Press a number key (1–9) while holding a modifier to move all-but-1 or exactly-1 to that hotbar slot
+- **Fill Existing Stacks** — Hold a modifier key (default: `Alt`) + Shift+Click to distribute items only into existing partial stacks
+- **Scroll Transfer** — Scroll up to move matching items to the container, scroll down to move them to your inventory
+- **Scroll Leave-1** — Hold a modifier key (default: `Ctrl`) while scrolling to leave one behind in each slot
+- **Copy/Paste Layout** — Ctrl+C to snapshot a container or inventory layout, Ctrl+V to rearrange items to match, Ctrl+X to cut
+- **Message Overlay** — Feedback messages render next to the GUI instead of in chat
+- **Configurable Keys** — Rebind all modifier keys to whatever you prefer
 - **Per-Feature Toggles** — Enable or disable each feature individually
-- **Key Flip** — Swap what the two modifier keys do on a per-feature basis
+- **Per-Tweak Key Overrides** — Set custom modifier keys for individual tweaks
 
 ## Installation
 
@@ -21,7 +29,9 @@ A Fabric mod for Minecraft that gives you precise control over how many items yo
 
 ## Configuration
 
-If you have Mod Menu installed, click the config button next to InvTweaks in the mod list. Otherwise, edit `config/invtweaks.json` directly.
+If you have Mod Menu installed, click the config button next to InvTweaks in the mod list. Otherwise, edit `config/invtweaks.json` directly. You can also press K in-game to open the config screen directly.
+
+The config screen has four tabs: All (everything), Tweaks (feature toggles), Hotkeys (keybinds and per-tweak overrides), and Debug (logging toggle).
 
 ### Default Keybinds
 
@@ -31,6 +41,13 @@ If you have Mod Menu installed, click the config button next to InvTweaks in the
 | `Alt` + Click | Pick up exactly 1 |
 | `Ctrl` + Shift+Click | Transfer all but 1 |
 | `Alt` + Shift+Click | Transfer exactly 1 |
+| `Alt` + Q | Throw half stack |
+| `Ctrl` + Q (on a slot) | Throw all but 1 |
+| `Alt` + Shift+Click | Fill existing stacks only |
+| Scroll Up/Down | Transfer all matching items |
+| `Ctrl` + Scroll | Transfer matching items, leave 1 |
+| `Ctrl`+C / `Ctrl`+V / `Ctrl`+X | Copy / Paste / Cut layout |
+| `K` | Open config screen |
 
 Both left and right variants of modifier keys are recognized.
 
@@ -38,17 +55,17 @@ Both left and right variants of modifier keys are recognized.
 
 InvTweaks is designed to work alongside other inventory mods:
 
-- **[Mouse Tweaks](https://modrinth.com/mod/mouse-tweaks)** — Fully compatible. InvTweaks detects Mouse Tweaks shift-drag operations and works correctly alongside them.
+- **[Mouse Tweaks](https://modrinth.com/mod/mouse-tweaks)** — Fully compatible. InvTweaks detects Mouse Tweaks shift-drag operations and works correctly alongside them. Note: Mouse Tweaks' scroll wheel features may conflict with InvTweaks scroll transfer — disable one or the other if needed.
 - **[Mod Menu](https://modrinth.com/mod/modmenu)** — Provides an in-game configuration screen.
 - **Other inventory mods** — InvTweaks uses mixin injection on `HandledScreen` and should be compatible with most mods that don't override the same click handling methods.
 
 ### macOS Note
 
-InvTweaks includes specific handling for macOS `Cmd+Shift+Click` bulk-move behavior, preventing conflicts with the modifier key system. MacOS users should install [MacOS Input Fixes](https://modrinth.com/mod/macos-input-fixes) for full compatability.
+InvTweaks includes specific handling for macOS `Cmd+Shift+Click` bulk-move behavior, preventing conflicts with the modifier key system. MacOS users should install [MacOS Input Fixes](https://modrinth.com/mod/macos-input-fixes) for full compatibility.
 
 ### Known Limitations
 
-- **Creative Mode** — InvTweaks does not currently work in the player's inventory while in Creative mode. Creative inventory uses a different screen handler that bypasses the standard slot interaction system. This may be addressed in a future update.
+- **Creative Mode** — InvTweaks does not currently work in the player's inventory while in Creative mode. Creative inventory uses a different screen handler that bypasses the standard slot interaction system. Scroll transfer in Creative inventory is also disabled to avoid conflicting with Creative tab scrolling.
 
 ## Credits
 
