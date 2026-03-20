@@ -15,6 +15,9 @@ A Fabric mod for Minecraft that gives you precise control over how many items yo
 - **Scroll Transfer** — Scroll up to move matching items to the container, scroll down to move them to your inventory
 - **Scroll Leave-1** — Hold a modifier key (default: `Ctrl`) while scrolling to leave one behind in each slot
 - **Copy/Paste Layout** — Ctrl+C to snapshot a container or inventory layout, Ctrl+V to rearrange items to match, Ctrl+X to cut
+- **Clipboard History** — Maintains a history of past clipboard snapshots. Press Shift+Tab while an inventory is open to browse, select, or delete saved layouts with item preview grids.
+- **Death Auto-Snapshot** — Player inventory is automatically saved to clipboard history on death so you can paste your layout back after respawning
+- **Persistent Clipboard** — Clipboard history is saved to disk and survives game restarts
 - **Message Overlay** — Feedback messages render next to the GUI instead of in chat
 - **Configurable Keys** — Rebind all modifier keys to whatever you prefer
 - **Per-Feature Toggles** — Enable or disable each feature individually
@@ -47,6 +50,7 @@ The config screen has four tabs: All (everything), Tweaks (feature toggles), Hot
 | Scroll Up/Down | Transfer all matching items |
 | `Ctrl` + Scroll | Transfer matching items, leave 1 |
 | `Ctrl`+C / `Ctrl`+V / `Ctrl`+X | Copy / Paste / Cut layout |
+| `Shift`+`Tab` | Open clipboard history browser |
 | `K` | Open config screen |
 
 Both left and right variants of modifier keys are recognized.
@@ -66,6 +70,7 @@ InvTweaks includes specific handling for macOS `Cmd+Shift+Click` bulk-move behav
 ### Known Limitations
 
 - **Creative Mode** — InvTweaks does not currently work in the player's inventory while in Creative mode. Creative inventory uses a different screen handler that bypasses the standard slot interaction system. Scroll transfer in Creative inventory is also disabled to avoid conflicting with Creative tab scrolling.
+- **Size-Mismatched Paste** — Pasting a layout between different-sized containers (e.g., 27-slot chest into 54-slot double chest) is currently blocked. A proper size-mismatch GUI selector is planned for a future update.
 
 ## Credits
 
