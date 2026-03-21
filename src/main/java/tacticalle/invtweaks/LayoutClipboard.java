@@ -387,69 +387,130 @@ public class LayoutClipboard {
     // ========== PASTE ==========
 
     /**
-     * Paste the clipboard layout into the current container/inventory.
+     * Result of a paste operation for the caller to display appropriate messages.
      */
-    public static void pasteLayout(ScreenHandler handler, boolean isPlayerOnly) {
+    public static class PasteResult {
+        public final int slotsPlaced;
+        public final int slotsTotal;
+        public final boolean cursorWasOccupied;
+        public final boolean alreadyMatched;
+        public final boolean noMatchingItems;
+        public final boolean sizeMismatch;
+        public final boolean noClipboard;
+        public final boolean typeMismatch;
+        public final String errorMessage;
+
+        private PasteResult(int slotsPlaced, int slotsTotal, boolean cursorWasOccupied,
+                            boolean alreadyMatched, boolean noMatchingItems, boolean sizeMismatch,
+                            boolean noClipboard, boolean typeMismatch, String errorMessage) {
+            this.slotsPlaced = slotsPlaced;
+            this.slotsTotal = slotsTotal;
+            this.cursorWasOccupied = cursorWasOccupied;
+            this.alreadyMatched = alreadyMatched;
+            this.noMatchingItems = noMatchingItems;
+            this.sizeMismatch = sizeMismatch;
+            this.noClipboard = noClipboard;
+            this.typeMismatch = typeMismatch;
+            this.errorMessage = errorMessage;
+        }
+
+        public static PasteResult success(int placed, int total, boolean cursorOccupied) {
+            return new PasteResult(placed, total, cursorOccupied, false, false, false, false, false, null);
+        }
+        public static PasteResult alreadyMatched() {
+            return new PasteResult(0, 0, false, true, false, false, false, false, null);
+        }
+        public static PasteResult noClipboard() {
+            return new PasteResult(0, 0, false, false, false, false, true, false, null);
+        }
+        public static PasteResult noMatchingItems() {
+            return new PasteResult(0, 0, false, false, true, false, false, false, null);
+        }
+        public static PasteResult sizeMismatch(int clipSize, int containerSize) {
+            return new PasteResult(0, 0, false, false, false, true, false, false,
+                    "Layout size incompatible");
+        }
+        public static PasteResult typeMismatch(String msg) {
+            return new PasteResult(0, 0, false, false, false, false, false, true, msg);
+        }
+    }
+
+    /**
+     * Paste the clipboard layout into the current container/inventory.
+     * Uses the active clipboard entry for data.
+     */
+    public static PasteResult pasteLayout(ScreenHandler handler, boolean isPlayerOnly) {
+        return pasteLayout(handler, isPlayerOnly, null);
+    }
+
+    /**
+     * Paste a layout into the current container/inventory.
+     * @param overrideData if non-null, use this data instead of the active clipboard entry.
+     *                     Keys are clipboard slot keys (0-based), values are SlotData.
+     */
+    public static PasteResult pasteLayout(ScreenHandler handler, boolean isPlayerOnly,
+                                           Map<Integer, SlotData> overrideData) {
         MinecraftClient mc = MinecraftClient.getInstance();
         ClientPlayerInteractionManager im = mc.interactionManager;
         PlayerEntity player = mc.player;
-        if (im == null || player == null) return;
+        if (im == null || player == null) return PasteResult.noClipboard();
 
-        // Get the active clipboard entry
-        int activeIndex = isPlayerOnly ? activePlayerIndex : activeContainerIndex;
-        InvTweaksConfig.debugLog("PASTE", "using clipboard entry: index=%d type=%s activeContainer=%d activePlayer=%d historySize=%d",
-                activeIndex, isPlayerOnly ? "player" : "container", activeContainerIndex, activePlayerIndex, history.size());
-        if (activeIndex < 0 || activeIndex >= history.size()) {
-            InvTweaksOverlay.show("No layout copied", 0xFFFF5555);
-            return;
+        // Get clipboard data — either from override or active clipboard
+        Map<Integer, SlotData> clipboardSlots;
+        int clipboardSlotCount;
+
+        if (overrideData != null) {
+            clipboardSlots = overrideData;
+            clipboardSlotCount = overrideData.size();
+            InvTweaksConfig.debugLog("PASTE", "using override data: %d slots", clipboardSlotCount);
+        } else {
+            int activeIndex = isPlayerOnly ? activePlayerIndex : activeContainerIndex;
+            InvTweaksConfig.debugLog("PASTE", "using clipboard entry: index=%d type=%s activeContainer=%d activePlayer=%d historySize=%d",
+                    activeIndex, isPlayerOnly ? "player" : "container", activeContainerIndex, activePlayerIndex, history.size());
+            if (activeIndex < 0 || activeIndex >= history.size()) {
+                return PasteResult.noClipboard();
+            }
+
+            HistoryEntry activeEntry = history.get(activeIndex);
+            InvTweaksConfig.debugLog("PASTE", "selected entry: label=%s isPlayer=%s slots=%d timestamp=%d",
+                    activeEntry.label, activeEntry.snapshot.isPlayerInventory, activeEntry.snapshot.slotCount, activeEntry.timestamp);
+            LayoutSnapshot clipboard = activeEntry.snapshot;
+
+            // Check clipboard type matches current context
+            if (clipboard.isPlayerInventory != isPlayerOnly) {
+                String clipType = clipboard.isPlayerInventory ? "player inventory" : "container";
+                String currentType = isPlayerOnly ? "player inventory" : "container";
+                return PasteResult.typeMismatch("Layout was copied from " + clipType + ", can't paste into " + currentType);
+            }
+
+            clipboardSlots = clipboard.slots;
+            clipboardSlotCount = clipboard.slotCount;
         }
 
-        HistoryEntry activeEntry = history.get(activeIndex);
-        InvTweaksConfig.debugLog("PASTE", "selected entry: label=%s isPlayer=%s slots=%d timestamp=%d",
-                activeEntry.label, activeEntry.snapshot.isPlayerInventory, activeEntry.snapshot.slotCount, activeEntry.timestamp);
-        LayoutSnapshot clipboard = activeEntry.snapshot;
-
-        // Check clipboard type matches current context
-        if (clipboard.isPlayerInventory != isPlayerOnly) {
-            String clipType = clipboard.isPlayerInventory ? "player inventory" : "container";
-            String currentType = isPlayerOnly ? "player inventory" : "container";
-            InvTweaksOverlay.show("Layout was copied from " + clipType + ", can't paste into " + currentType, 0xFFFF5555);
-            return;
-        }
-
-        // Check if cursor has items — abort paste if so
+        // Check if cursor has items — cursor-aware paste
         ItemStack cursorStack = handler.getCursorStack();
-        if (cursorStack != null && !cursorStack.isEmpty()) {
-            InvTweaksOverlay.show("Put away held items first", 0xFFFFFF55);
-            return;
-        }
+        boolean cursorOccupied = cursorStack != null && !cursorStack.isEmpty();
+        int cursorStashSlot = -1;
 
         // Determine target slots and build clipboard-key → handler-slot mapping
-        // For player inventory: clipboard keys 0-8 → handler slots 36-44, keys 9-35 → handler slots 9-35
-        // For containers: clipboard keys map sequentially to non-player slots
         List<Integer> targetSlotIds = new ArrayList<>();
         Map<Integer, SlotData> targetLayout = new LinkedHashMap<>();
         boolean sizeMismatch = false;
 
         if (isPlayerOnly) {
-            // Build direct mapping from clipboard slot keys to handler slot IDs
-            for (Map.Entry<Integer, SlotData> clipEntry : clipboard.slots.entrySet()) {
+            for (Map.Entry<Integer, SlotData> clipEntry : clipboardSlots.entrySet()) {
                 int clipKey = clipEntry.getKey();
                 int handlerSlot;
                 if (clipKey >= 0 && clipKey <= 8) {
-                    // Hotbar: snapshot key 0-8 → handler slot 36-44
                     handlerSlot = clipKey + 36;
                 } else if (clipKey >= 9 && clipKey <= 35) {
-                    // Main inventory: snapshot key 9-35 → handler slot 9-35
                     handlerSlot = clipKey;
                 } else if (clipKey >= 36 && clipKey <= 39) {
-                    // Armor: snapshot key 36-39 → handler slot 5-8
                     handlerSlot = clipKey - 36 + 5;
                 } else if (clipKey == 40) {
-                    // Offhand: snapshot key 40 → handler slot 45
                     handlerSlot = 45;
                 } else {
-                    continue; // unknown slot key, skip
+                    continue;
                 }
                 if (handlerSlot < handler.slots.size()) {
                     targetSlotIds.add(handlerSlot);
@@ -457,7 +518,6 @@ public class LayoutClipboard {
                 }
             }
         } else {
-            // Container: collect non-player slots as targets
             List<Integer> containerSlotIds = new ArrayList<>();
             for (int i = 0; i < handler.slots.size(); i++) {
                 Slot slot = handler.slots.get(i);
@@ -467,24 +527,24 @@ public class LayoutClipboard {
             }
             targetSlotIds.addAll(containerSlotIds);
 
-            // Size mismatch detection (flag only, no message yet — Fix 1)
-            if (containerSlotIds.size() != clipboard.slotCount) {
+            // Only check size mismatch when using clipboard data (not override data).
+            // Override data is pre-sliced by the caller to match the container size.
+            if (overrideData == null && containerSlotIds.size() != clipboardSlotCount) {
                 sizeMismatch = true;
-                InvTweaksConfig.debugLog("PASTE", "size mismatch | clipboard=%d | target=%d", clipboard.slotCount, containerSlotIds.size());
+                InvTweaksConfig.debugLog("PASTE", "size mismatch | clipboard=%d | target=%d", clipboardSlotCount, containerSlotIds.size());
             }
 
-            // Sequential mapping for containers
-            List<Integer> clipboardSlotIds = new ArrayList<>(clipboard.slots.keySet());
-            Collections.sort(clipboardSlotIds);
-            int slotsToProcess = Math.min(clipboardSlotIds.size(), containerSlotIds.size());
+            List<Integer> clipboardSlotIdsSorted = new ArrayList<>(clipboardSlots.keySet());
+            Collections.sort(clipboardSlotIdsSorted);
+            int slotsToProcess = Math.min(clipboardSlotIdsSorted.size(), containerSlotIds.size());
             for (int i = 0; i < slotsToProcess; i++) {
-                int clipSlotId = clipboardSlotIds.get(i);
+                int clipSlotId = clipboardSlotIdsSorted.get(i);
                 int actualSlotId = containerSlotIds.get(i);
-                targetLayout.put(actualSlotId, clipboard.slots.get(clipSlotId));
+                targetLayout.put(actualSlotId, clipboardSlots.get(clipSlotId));
             }
         }
 
-        // Build item pool: what items are available across all accessible slots
+        // Build item pool
         Set<Integer> allAccessibleSlots = new HashSet<>(targetSlotIds);
         if (!isPlayerOnly) {
             for (int i = 0; i < handler.slots.size(); i++) {
@@ -498,20 +558,19 @@ public class LayoutClipboard {
             }
         }
 
-        // Build set of item types present in the clipboard snapshot
+        // Build set of item types in clipboard
         Set<Item> clipboardItemTypes = new HashSet<>();
-        for (SlotData sd : clipboard.slots.values()) {
+        for (SlotData sd : clipboardSlots.values()) {
             if (sd != null && sd.item() != null) {
                 clipboardItemTypes.add(sd.item());
             }
         }
 
-        // Check if any matching items are available in accessible slots
+        // Check if any matching items are available
         int availableMatchCount = 0;
         for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
             SlotData desired = entry.getValue();
             if (desired.item() == null) continue;
-            // Check if this item type exists anywhere in accessible slots
             for (int slotId : allAccessibleSlots) {
                 ItemStack stack = handler.slots.get(slotId).getStack();
                 if (!stack.isEmpty() && stack.getItem() == desired.item()) {
@@ -521,59 +580,126 @@ public class LayoutClipboard {
             }
         }
 
-        // Fix 1: "No matching items" takes priority over "size mismatch"
         boolean clipboardHasItems = !clipboardItemTypes.isEmpty();
         if (clipboardHasItems && availableMatchCount == 0) {
-            InvTweaksOverlay.show("No matching items available", 0xFFFFFF55);
-            return;
+            return PasteResult.noMatchingItems();
         }
 
-        // Fix 2: Block all size-mismatched pastes (after no-match check, before any item movement)
         if (sizeMismatch) {
-            InvTweaksOverlay.show("Layout size incompatible", 0xFFFFFF55);
-            InvTweaksConfig.debugLog("PASTE", "blocked: clipboard=%d target=%d", clipboard.slotCount,
-                    (int) targetSlotIds.stream().count());
-            return;
+            return PasteResult.sizeMismatch(clipboardSlotCount, targetSlotIds.size());
         }
 
-        InvTweaksConfig.debugLog("PASTE", "starting paste | targetSlots=%d | accessibleSlots=%d", targetLayout.size(), allAccessibleSlots.size());
+        InvTweaksConfig.debugLog("PASTE", "starting paste | targetSlots=%d | accessibleSlots=%d | cursorOccupied=%s",
+                targetLayout.size(), allAccessibleSlots.size(), cursorOccupied);
 
-        int matchedSlots = 0;
-
-        // Quick check: is the layout already matching? (checks item TYPE only, not count)
+        // Quick check: is the layout already matching?
         boolean alreadyMatches = true;
         for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
             int slotId = entry.getKey();
             SlotData desired = entry.getValue();
             ItemStack current = handler.slots.get(slotId).getStack();
             if (desired.item() == null) {
-                // Clipboard says empty — only fail if slot has an item that IS in the clipboard layout
-                // (non-layout items are left alone by paste, so they don't count as a mismatch)
                 if (!current.isEmpty() && clipboardItemTypes.contains(current.getItem())) {
-                    InvTweaksConfig.debugLog("PASTE", "alreadyMatches: slot=%d should be empty but has layout item %s", slotId, current.getItem());
                     alreadyMatches = false; break;
                 }
             } else {
                 if (current.isEmpty() || current.getItem() != desired.item()) {
-                    InvTweaksConfig.debugLog("PASTE", "alreadyMatches: slot=%d clipboard=%s actual=%s", slotId, desired.item(), current.isEmpty() ? "empty" : current.getItem());
                     alreadyMatches = false; break;
                 }
-                // Also check components — two ominous bottles at different levels are NOT a match
                 if (desired.components() != null) {
                     String currentComponents = serializeComponents(current);
                     if (!desired.components().equals(currentComponents)) {
-                        InvTweaksConfig.debugLog("PASTE", "alreadyMatches: slot=%d type matches but components differ", slotId);
                         alreadyMatches = false; break;
                     }
                 }
             }
         }
         if (alreadyMatches) {
-            InvTweaksOverlay.show("Layout already matches!", 0xFF55FF55);
-            return;
+            return PasteResult.alreadyMatched();
         }
 
-        // Process each target slot
+        // Two-pass partial paste logic
+        int totalTargets = 0;
+        for (SlotData sd : targetLayout.values()) {
+            if (sd.item() != null) totalTargets++;
+            else {
+                // Count empty-target slots that have layout items to clear
+                // (these also count as targets we try to achieve)
+                totalTargets++;
+            }
+        }
+
+        // Stash cursor item in a non-target empty slot so normal paste logic can run
+        if (cursorOccupied) {
+            for (int slotId : allAccessibleSlots) {
+                if (!targetLayout.containsKey(slotId) && handler.slots.get(slotId).getStack().isEmpty()) {
+                    cursorStashSlot = slotId;
+                    break;
+                }
+            }
+            if (cursorStashSlot >= 0) {
+                im.clickSlot(handler.syncId, cursorStashSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                InvTweaksConfig.debugLog("PASTE", "stashed cursor item in slot %d", cursorStashSlot);
+                allAccessibleSlots.remove(cursorStashSlot);
+                allAccessibleSlots.remove(cursorStashSlot);
+            } else {
+                InvTweaksConfig.debugLog("PASTE", "cannot stash cursor — no non-target empty slot available");
+                return PasteResult.success(0, targetLayout.size(), true);
+            }
+        }
+
+        int matchedSlots = 0;
+        Set<Integer> failedSlots = new HashSet<>();
+
+        // Pass 1
+        matchedSlots = executePastePass(handler, im, player, targetLayout, allAccessibleSlots,
+                clipboardItemTypes, isPlayerOnly, false, failedSlots);
+
+        // Pass 2: retry failed slots (displacement in pass 1 may have freed slots)
+        if (!failedSlots.isEmpty()) {
+            InvTweaksConfig.debugLog("PASTE", "pass 2: retrying %d failed slots", failedSlots.size());
+            Map<Integer, SlotData> retryLayout = new LinkedHashMap<>();
+            for (int failedSlot : failedSlots) {
+                retryLayout.put(failedSlot, targetLayout.get(failedSlot));
+            }
+            Set<Integer> retryFailed = new HashSet<>();
+            int pass2Matched = executePastePass(handler, im, player, retryLayout, allAccessibleSlots,
+                    clipboardItemTypes, isPlayerOnly, false, retryFailed);
+            matchedSlots += pass2Matched;
+        }
+
+        // Final safety: if cursor was NOT occupied initially, make sure cursor is clean
+        // If cursor WAS occupied, leave it alone
+        if (!cursorOccupied && !handler.getCursorStack().isEmpty()) {
+            int emptySlot = findAnyEmptySlot(handler, allAccessibleSlots);
+            if (emptySlot >= 0) {
+                im.clickSlot(handler.syncId, emptySlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+            }
+        }
+
+        // Restore cursor item if we stashed it
+        if (cursorStashSlot >= 0) {
+            im.clickSlot(handler.syncId, cursorStashSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+            InvTweaksConfig.debugLog("PASTE", "restored cursor item from slot %d", cursorStashSlot);
+        }
+
+        InvTweaksConfig.debugLog("PASTE", "complete | matched=%d/%d | cursorOccupied=%s",
+                matchedSlots, targetLayout.size(), cursorOccupied);
+        return PasteResult.success(matchedSlots, targetLayout.size(), cursorOccupied);
+    }
+
+    /**
+     * Execute one pass of the paste algorithm over the given target layout.
+     * Returns the number of slots successfully matched/placed.
+     * Populates failedSlots with slot IDs that could not be processed.
+     */
+    private static int executePastePass(ScreenHandler handler, ClientPlayerInteractionManager im,
+                                         PlayerEntity player, Map<Integer, SlotData> targetLayout,
+                                         Set<Integer> allAccessibleSlots, Set<Item> clipboardItemTypes,
+                                         boolean isPlayerOnly, boolean cursorOccupied,
+                                         Set<Integer> failedSlots) {
+        int matchedSlots = 0;
+
         for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
             int targetSlotId = entry.getKey();
             SlotData desired = entry.getValue();
@@ -586,18 +712,19 @@ public class LayoutClipboard {
                 }
             }
 
-            // Safety: if cursor has items from mod operations, try to put them away first
-            if (!handler.getCursorStack().isEmpty()) {
+            // Safety: if cursor picked up items from mod operations (and was NOT occupied at start),
+            // try to put them away
+            if (!cursorOccupied && !handler.getCursorStack().isEmpty()) {
                 int dump = findAnyEmptySlot(handler, allAccessibleSlots);
                 if (dump >= 0) {
                     im.clickSlot(handler.syncId, dump, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                 } else {
                     InvTweaksConfig.debugLog("PASTE", "ABORT: cursor not empty and no room at slot %d", targetSlotId);
-                    break;
+                    failedSlots.add(targetSlotId);
+                    continue;
                 }
             }
 
-            // Re-read the slot fresh
             ItemStack currentStack = handler.slots.get(targetSlotId).getStack();
 
             if (desired.item() == null) {
@@ -605,23 +732,26 @@ public class LayoutClipboard {
                     matchedSlots++;
                     continue;
                 }
-                // Fix 2: Only move this item out if its type is part of the clipboard layout
                 if (!clipboardItemTypes.contains(currentStack.getItem())) {
-                    // This item type isn't in the clipboard — leave it alone
                     InvTweaksConfig.debugLog("PASTE", "skipping non-layout item at slot %d (%s)", targetSlotId, currentStack.getItem());
                     continue;
                 }
-                boolean moved = moveItemOut(handler, im, player, targetSlotId, allAccessibleSlots, targetLayout, isPlayerOnly);
+                boolean moved;
+                if (cursorOccupied) {
+                    moved = moveItemOutQuickMove(handler, im, player, targetSlotId);
+                } else {
+                    moved = moveItemOut(handler, im, player, targetSlotId, allAccessibleSlots, targetLayout, isPlayerOnly);
+                }
                 if (moved) {
                     matchedSlots++;
+                } else {
+                    failedSlots.add(targetSlotId);
                 }
                 continue;
             }
 
-            // Fix 5: Paste quantity maximization — fill to max stack size, not clipboard count
             int maxStack = new ItemStack(desired.item()).getMaxCount();
 
-            // Target should have a specific item
             boolean typeMatches = !currentStack.isEmpty() && currentStack.getItem() == desired.item();
             boolean componentMatches = true;
             if (typeMatches && desired.components() != null) {
@@ -633,43 +763,50 @@ public class LayoutClipboard {
                     matchedSlots++;
                     continue;
                 }
-                // Try to fill up to max stack size
-                boolean filled = addMore(handler, im, player, targetSlotId, desired.item(),
-                        desired.components(), maxStack - currentStack.getCount(), allAccessibleSlots, targetLayout, isPlayerOnly);
+                if (!cursorOccupied) {
+                    addMore(handler, im, player, targetSlotId, desired.item(),
+                            desired.components(), maxStack - currentStack.getCount(), allAccessibleSlots, targetLayout, isPlayerOnly);
+                }
+                // When cursor is occupied, we can't do addMore (it uses PICKUP), but the type matches, so count it
                 matchedSlots++;
                 continue;
             }
 
             // Wrong item or empty — need to place the desired item here
             if (!currentStack.isEmpty()) {
-                // Fix 2: Only displace if this item type is part of the clipboard layout
                 if (!clipboardItemTypes.contains(currentStack.getItem())) {
-                    // Non-layout item occupying a target slot — skip, don't displace
                     InvTweaksConfig.debugLog("PASTE", "skipping non-layout item at target slot %d (%s)", targetSlotId, currentStack.getItem());
                     continue;
                 }
-                boolean moved = moveItemOut(handler, im, player, targetSlotId, allAccessibleSlots, targetLayout, isPlayerOnly);
+                boolean moved;
+                if (cursorOccupied) {
+                    moved = moveItemOutQuickMove(handler, im, player, targetSlotId);
+                } else {
+                    moved = moveItemOut(handler, im, player, targetSlotId, allAccessibleSlots, targetLayout, isPlayerOnly);
+                }
                 if (!moved) {
                     InvTweaksConfig.debugLog("PASTE", "could not displace item at slot %d", targetSlotId);
+                    failedSlots.add(targetSlotId);
                     continue;
                 }
             }
 
-            boolean placed = sourceItem(handler, im, player, targetSlotId, desired.item(), maxStack,
-                    desired.components(), allAccessibleSlots, targetLayout, isPlayerOnly);
-            if (placed) matchedSlots++;
-        }
-
-        // Final safety: make sure cursor is clean
-        if (!handler.getCursorStack().isEmpty()) {
-            int emptySlot = findAnyEmptySlot(handler, allAccessibleSlots);
-            if (emptySlot >= 0) {
-                im.clickSlot(handler.syncId, emptySlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+            boolean placed;
+            if (cursorOccupied) {
+                placed = sourceItemQuickMove(handler, im, player, targetSlotId, desired.item(),
+                        desired.components(), allAccessibleSlots, targetLayout);
+            } else {
+                placed = sourceItem(handler, im, player, targetSlotId, desired.item(), maxStack,
+                        desired.components(), allAccessibleSlots, targetLayout, isPlayerOnly);
+            }
+            if (placed) {
+                matchedSlots++;
+            } else {
+                failedSlots.add(targetSlotId);
             }
         }
 
-        InvTweaksOverlay.show("Layout pasted", 0xFF55FF55);
-        InvTweaksConfig.debugLog("PASTE", "complete | matched=%d/%d", matchedSlots, targetLayout.size());
+        return matchedSlots;
     }
 
 
@@ -784,6 +921,84 @@ public class LayoutClipboard {
 
         InvTweaksOverlay.show("Inventory saved (death)", 0xFFFFAA00); // orange
         InvTweaksConfig.debugLog("DEATH", "Saved cached inventory as death snapshot");
+    }
+
+    // ========== CURSOR-SAFE PASTE HELPERS (QUICK_MOVE only) ==========
+
+    /**
+     * Move an item out of a target slot using only QUICK_MOVE (shift-click).
+     * Safe to use when cursor is occupied.
+     */
+    private static boolean moveItemOutQuickMove(ScreenHandler handler, ClientPlayerInteractionManager im,
+                                                 PlayerEntity player, int targetSlotId) {
+        ItemStack stack = handler.slots.get(targetSlotId).getStack();
+        if (stack.isEmpty()) return true;
+
+        InvTweaksConfig.debugLog("PASTE", "moveOutQuickMove slot=%d | item=%s | count=%d", targetSlotId, stack.getItem(), stack.getCount());
+        im.clickSlot(handler.syncId, targetSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.QUICK_MOVE, player);
+
+        // Check if it was moved
+        ItemStack after = handler.slots.get(targetSlotId).getStack();
+        if (after.isEmpty()) return true;
+
+        InvTweaksConfig.debugLog("PASTE", "moveOutQuickMove FAILED slot=%d | still has %s x%d", targetSlotId, after.getItem(), after.getCount());
+        return false;
+    }
+
+    /**
+     * Source an item into a target slot using only QUICK_MOVE.
+     * Find a slot containing the desired item type elsewhere, QUICK_MOVE it, and hope it lands in/near the target.
+     * This is a best-effort approach for cursor-occupied paste.
+     */
+    private static boolean sourceItemQuickMove(ScreenHandler handler, ClientPlayerInteractionManager im,
+                                                PlayerEntity player, int targetSlotId, Item itemType,
+                                                String desiredComponents,
+                                                Set<Integer> allAccessible,
+                                                Map<Integer, SlotData> targetLayout) {
+        // Look for the item on the OTHER side from the target slot, then QUICK_MOVE it
+        // QUICK_MOVE sends items to the other side, so we need the source to be on the opposite side
+        boolean targetIsPlayer = handler.slots.get(targetSlotId).inventory instanceof PlayerInventory;
+
+        List<Integer> rankedSources = rankSourceSlots(handler, targetSlotId, itemType,
+                desiredComponents, allAccessible, targetLayout);
+
+        for (int srcSlot : rankedSources) {
+            ItemStack srcStack = handler.slots.get(srcSlot).getStack();
+            if (srcStack.isEmpty() || srcStack.getItem() != itemType) continue;
+
+            if (desiredComponents != null) {
+                String srcComponents = serializeComponents(srcStack);
+                if (!desiredComponents.equals(srcComponents)) continue;
+            }
+
+            // QUICK_MOVE only works cross-side (container↔player)
+            boolean srcIsPlayer = handler.slots.get(srcSlot).inventory instanceof PlayerInventory;
+            if (srcIsPlayer == targetIsPlayer) continue; // Same side — QUICK_MOVE won't help
+
+            SlotData srcTarget = targetLayout.get(srcSlot);
+            if (srcTarget != null && srcTarget.item() == itemType) {
+                // This source is in its correct target position — skip to avoid disrupting it
+                boolean rightVariant = true;
+                if (srcTarget.components() != null) {
+                    String srcComp = serializeComponents(srcStack);
+                    rightVariant = srcTarget.components().equals(srcComp);
+                }
+                if (rightVariant) continue;
+            }
+
+            InvTweaksConfig.debugLog("PASTE", "sourceItemQuickMove target=%d | src=%d | item=%s", targetSlotId, srcSlot, itemType);
+            im.clickSlot(handler.syncId, srcSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.QUICK_MOVE, player);
+
+            // Check if the target slot now has the item
+            ItemStack targetAfter = handler.slots.get(targetSlotId).getStack();
+            if (!targetAfter.isEmpty() && targetAfter.getItem() == itemType) {
+                return true;
+            }
+            // QUICK_MOVE may have placed it in a different slot — that's OK for partial paste
+            // but we didn't place it in our target. Try another source.
+        }
+
+        return false;
     }
 
     // ========== PASTE HELPERS ==========
@@ -1183,5 +1398,60 @@ public class LayoutClipboard {
 
     public static void clearClipboard() {
         clearHistory();
+    }
+
+    /**
+     * Get the active clipboard entry for the given context.
+     * Returns null if no active clipboard exists.
+     */
+    public static HistoryEntry getActiveEntry(boolean isPlayerOnly) {
+        int activeIndex = isPlayerOnly ? activePlayerIndex : activeContainerIndex;
+        if (activeIndex < 0 || activeIndex >= history.size()) return null;
+        return history.get(activeIndex);
+    }
+
+    /**
+     * Get the number of non-player (container) slots in the current handler.
+     */
+    public static int getContainerSlotCount(ScreenHandler handler) {
+        int count = 0;
+        for (int i = 0; i < handler.slots.size(); i++) {
+            Slot slot = handler.slots.get(i);
+            if (!(slot.inventory instanceof PlayerInventory)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Slice clipboard data to a specific half (for 54→27 paste).
+     * @param fullData the full 54-slot clipboard data
+     * @param half "top" for keys 0-26, "bottom" for keys 27-53 (remapped to 0-26)
+     * @return sliced data with keys remapped to 0-26
+     */
+    public static Map<Integer, SlotData> sliceClipboardHalf(Map<Integer, SlotData> fullData, String half) {
+        Map<Integer, SlotData> sliced = new LinkedHashMap<>();
+        List<Integer> sortedKeys = new ArrayList<>(fullData.keySet());
+        Collections.sort(sortedKeys);
+
+        if (half.equals("top")) {
+            // Take first 27 slots (keys 0-26)
+            for (int key : sortedKeys) {
+                if (key < 27) {
+                    sliced.put(key, fullData.get(key));
+                }
+            }
+        } else {
+            // Take keys 27-53, remap to 0-26
+            for (int key : sortedKeys) {
+                if (key >= 27 && key < 54) {
+                    sliced.put(key - 27, fullData.get(key));
+                }
+            }
+        }
+
+        InvTweaksConfig.debugLog("HALF-SELECT", "sliced %s half: %d slots from %d total", half, sliced.size(), fullData.size());
+        return sliced;
     }
 }

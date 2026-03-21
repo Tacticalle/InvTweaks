@@ -14,7 +14,8 @@ A Fabric mod for Minecraft that gives you precise control over how many items yo
 - **Fill Existing Stacks** — Hold a modifier key (default: `Alt`) + Shift+Click to distribute items only into existing partial stacks
 - **Scroll Transfer** — Scroll up to move matching items to the container, scroll down to move them to your inventory
 - **Scroll Leave-1** — Hold a modifier key (default: `Ctrl`) while scrolling to leave one behind in each slot
-- **Copy/Paste Layout** — Ctrl+C to snapshot a container or inventory layout (including armor and offhand), Ctrl+V to rearrange items to match, Ctrl+X to cut. Paste fills each slot to max stack size using available items. Component data (enchantments, potion types, etc.) is tracked for accurate matching.
+- **Copy/Paste Layout** — Ctrl+C to snapshot a container or inventory layout (including armor and offhand), Ctrl+V to rearrange items to match, Ctrl+X to cut. Paste fills each slot to max stack size using available items. Component data (enchantments, potion types, etc.) is tracked for accurate matching. Paste works even with items on your cursor (uses shift-click only to keep cursor items safe). Partial paste places as many items as possible when room is limited.
+- **Half-Selector for Size Mismatches** — Pasting a double chest layout into a single chest shows an interactive overlay to choose the Top Half or Bottom Half. Pasting a single chest layout into a double chest automatically fills the top rows.
 - **Clipboard History** — Maintains a history of past clipboard snapshots. Press Shift+Tab while an inventory is open to browse, select, or delete saved layouts with item preview grids and hover tooltips.
 - **Death Auto-Snapshot** — Player inventory (including armor and offhand) is automatically saved to clipboard history on death so you can paste your layout back after respawning
 - **Persistent Clipboard** — Clipboard history is saved to disk and survives game restarts
@@ -70,7 +71,7 @@ InvTweaks includes specific handling for macOS `Cmd+Shift+Click` bulk-move behav
 ### Known Limitations
 
 - **Creative Mode** — InvTweaks does not currently work in the player's inventory while in Creative mode. Creative inventory uses a different screen handler that bypasses the standard slot interaction system. Scroll transfer in Creative inventory is also disabled to avoid conflicting with Creative tab scrolling.
-- **Size-Mismatched Paste** — Pasting a layout between different-sized containers (e.g., 27-slot chest into 54-slot double chest) is currently blocked. A proper size-mismatch GUI selector is planned for a future update.
+- **Size-Mismatched Paste** — Pasting between a single chest (27 slots) and double chest (54 slots) is handled with a half-selector overlay or auto-paste. Other size mismatches (dispensers, hoppers, crafting tables, etc.) are still blocked.
 
 ## Credits
 

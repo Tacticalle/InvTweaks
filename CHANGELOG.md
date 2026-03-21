@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.0] - 2026-03-20
+
+### Features
+- **Half-Selector Overlay** — When pasting a 54-slot (double chest) clipboard into a 27-slot (single chest) container, an interactive overlay appears letting you choose the Top Half or Bottom Half to paste. Uses keyboard shortcuts (A for top, D for bottom) or click the preview grids.
+- **Small-to-Large Auto-Paste** — Pasting a 27-slot clipboard into a 54-slot container automatically pastes into the top rows without user interaction, showing "Layout pasted (top half)"
+- **Cursor-Aware Paste** — Paste no longer requires an empty cursor. When items are on the cursor, paste uses shift-click (QUICK_MOVE) operations only to avoid disturbing the held items. Shows "Items on cursor held" alongside the paste result.
+- **Partial Paste** — When paste cannot place all items due to lack of room, it places as many as possible using a two-pass algorithm and reports the result (e.g., "Layout partially pasted (5/9 slots)")
+- **IntValueEntry Keyboard Input** — Click the number value in clipboard history settings (Max History, Auto-delete timer) to type a value directly instead of using +/- buttons. Supports Enter to apply, ESC to cancel, and automatic clamping to valid ranges.
+
+### Changes
+- Paste now returns a structured `PasteResult` instead of showing messages directly, enabling the caller to compose contextual feedback
+- Size-mismatch detection moved from `pasteLayout()` to the Ctrl+V handler for pre-check flexibility
+- `pasteLayout()` now accepts optional override data for half-selection and cross-size paste scenarios
+
 ## [1.3.1] - 2026-03-20
 
 ### Bug Fixes

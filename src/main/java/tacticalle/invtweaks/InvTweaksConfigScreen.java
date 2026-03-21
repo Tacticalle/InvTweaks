@@ -2,6 +2,8 @@ package tacticalle.invtweaks;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.Click;
+import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.Selectable;
 import net.minecraft.client.gui.screen.Screen;
@@ -364,21 +366,6 @@ public class InvTweaksConfigScreen extends Screen {
         button.setMessage(Text.literal("> Press a key <"));
     }
 
-    @Override
-    public boolean keyPressed(KeyInput input) {
-        if (capturingKey != null) {
-            int keyCode = input.key();
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-                // ESC = set key to "none" (-1)
-                applyCapture(-1);
-                return true;
-            }
-            applyCapture(keyCode);
-            return true;
-        }
-        return super.keyPressed(input);
-    }
-
     private void applyCapture(int keyCode) {
         if (capturingKey == null) return;
 
@@ -507,6 +494,27 @@ public class InvTweaksConfigScreen extends Screen {
 
         capturingKey = null;
         capturingButton = null;
+    }
+
+    // ========== Mouse click handling for IntValueEntry edit mode ==========
+
+    @Override
+    public boolean mouseClicked(Click click, boolean focused) {
+        double mouseX = click.x();
+        double mouseY = click.y();
+        // If an IntValueEntry is being edited, clicking anywhere outside the value button applies the edit
+        if (activeEditEntry != null && activeEditEntry.isEditing()) {
+            // Check if the click was on the value button itself (handled by the button's own click handler)
+            ButtonWidget valBtn = activeEditEntry.valueBtn;
+            if (mouseX >= valBtn.getX() && mouseX < valBtn.getX() + valBtn.getWidth()
+                    && mouseY >= valBtn.getY() && mouseY < valBtn.getY() + valBtn.getHeight()) {
+                // Let the button handle it (it will toggle edit mode)
+            } else {
+                // Clicked elsewhere: apply edit
+                activeEditEntry.applyEdit();
+            }
+        }
+        return super.mouseClicked(click, focused);
     }
 
     // ========== Render ==========
@@ -810,7 +818,10 @@ public class InvTweaksConfigScreen extends Screen {
         public List<? extends Selectable> selectableChildren() { return List.of(); }
     }
 
-    // ========== Integer value row with +/- buttons ==========
+    // ========== Integer value row with +/- buttons and keyboard edit ==========
+
+    /** Tracks which IntValueEntry is currently in edit mode (only one at a time). */
+    private IntValueEntry activeEditEntry = null;
 
     private class IntValueEntry extends ConfigEntry {
         private final String label;
@@ -821,6 +832,11 @@ public class InvTweaksConfigScreen extends Screen {
         private final ButtonWidget minusBtn;
         private final ButtonWidget plusBtn;
         private final ButtonWidget valueBtn;
+
+        // Edit mode state
+        private boolean editing = false;
+        private String editBuffer = "";
+        private int originalValue;
 
         IntValueEntry(String label, int min, int max,
                       java.util.function.Supplier<Integer> getter, java.util.function.Consumer<Integer> setter) {
@@ -834,20 +850,114 @@ public class InvTweaksConfigScreen extends Screen {
             int valW = 50;
 
             this.valueBtn = ButtonWidget.builder(Text.literal(String.valueOf(getter.get())), button -> {
-                // Click on value does nothing, just displays
+                if (editing) {
+                    applyEdit();
+                } else {
+                    startEdit();
+                }
             }).dimensions(0, 0, valW, BUTTON_HEIGHT).build();
 
             this.minusBtn = ButtonWidget.builder(Text.literal("-"), button -> {
+                if (editing) cancelEdit();
                 int v = Math.max(min, getter.get() - 1);
                 setter.accept(v);
                 valueBtn.setMessage(Text.literal(String.valueOf(v)));
             }).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
 
             this.plusBtn = ButtonWidget.builder(Text.literal("+"), button -> {
+                if (editing) cancelEdit();
                 int v = Math.min(max, getter.get() + 1);
                 setter.accept(v);
                 valueBtn.setMessage(Text.literal(String.valueOf(v)));
             }).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
+        }
+
+        private void startEdit() {
+            // Close any other active edit first
+            if (activeEditEntry != null && activeEditEntry != this) {
+                activeEditEntry.applyEdit();
+            }
+            editing = true;
+            originalValue = getter.get();
+            editBuffer = "";
+            activeEditEntry = IntValueEntry.this;
+            valueBtn.setMessage(Text.literal("\u00a7e_")); // yellow cursor
+        }
+
+        private void applyEdit() {
+            editing = false;
+            if (activeEditEntry == this) activeEditEntry = null;
+            if (editBuffer.isEmpty()) {
+                // Empty input: restore original
+                setter.accept(originalValue);
+                valueBtn.setMessage(Text.literal(String.valueOf(originalValue)));
+                InvTweaksConfig.debugLog("CONFIG", "int value edit cancelled (empty) | field=%s | restored=%d", label, originalValue);
+            } else {
+                try {
+                    int parsed = Integer.parseInt(editBuffer);
+                    int clamped = Math.max(min, Math.min(max, parsed));
+                    setter.accept(clamped);
+                    valueBtn.setMessage(Text.literal(String.valueOf(clamped)));
+                    InvTweaksConfig.debugLog("CONFIG", "int value edited | field=%s | old=%d | new=%d", label, originalValue, clamped);
+                } catch (NumberFormatException e) {
+                    setter.accept(originalValue);
+                    valueBtn.setMessage(Text.literal(String.valueOf(originalValue)));
+                }
+            }
+        }
+
+        private void cancelEdit() {
+            editing = false;
+            if (activeEditEntry == this) activeEditEntry = null;
+            setter.accept(originalValue);
+            valueBtn.setMessage(Text.literal(String.valueOf(originalValue)));
+            InvTweaksConfig.debugLog("CONFIG", "int value edit cancelled | field=%s | restored=%d", label, originalValue);
+        }
+
+        boolean handleKeyPress(int keyCode) {
+            if (!editing) return false;
+            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+                applyEdit();
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+                cancelEdit();
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
+                if (!editBuffer.isEmpty()) {
+                    editBuffer = editBuffer.substring(0, editBuffer.length() - 1);
+                    updateEditDisplay();
+                }
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_DELETE) {
+                editBuffer = "";
+                updateEditDisplay();
+                return true;
+            }
+            // Digit keys (top row: 48-57, numpad: 320-329)
+            if (keyCode >= GLFW.GLFW_KEY_0 && keyCode <= GLFW.GLFW_KEY_9) {
+                editBuffer += (char) ('0' + (keyCode - GLFW.GLFW_KEY_0));
+                updateEditDisplay();
+                return true;
+            }
+            if (keyCode >= GLFW.GLFW_KEY_KP_0 && keyCode <= GLFW.GLFW_KEY_KP_9) {
+                editBuffer += (char) ('0' + (keyCode - GLFW.GLFW_KEY_KP_0));
+                updateEditDisplay();
+                return true;
+            }
+            // Ignore all other keys while editing
+            return true;
+        }
+
+        private void updateEditDisplay() {
+            String display = editBuffer.isEmpty() ? "\u00a7e_" : "\u00a7e" + editBuffer + "_";
+            valueBtn.setMessage(Text.literal(display));
+        }
+
+        boolean isEditing() {
+            return editing;
         }
 
         @Override
@@ -869,11 +979,38 @@ public class InvTweaksConfigScreen extends Screen {
             minusBtn.setX(valueBtn.getX() - minusBtn.getWidth() - 2);
             minusBtn.setY(y);
             minusBtn.render(context, mouseX, mouseY, delta);
+
+            // If editing, check if user clicked outside this entry to apply
+            if (editing && !hovered) {
+                // We can't easily detect "clicked elsewhere" in render, so this is handled via keyPressed
+            }
         }
 
         @Override
         public List<? extends Element> children() { return List.of(minusBtn, valueBtn, plusBtn); }
         @Override
         public List<? extends Selectable> selectableChildren() { return List.of(minusBtn, valueBtn, plusBtn); }
+    }
+
+    // Override keyPressed to route to active IntValueEntry edit mode
+    @Override
+    public boolean keyPressed(KeyInput input) {
+        // IntValueEntry edit mode takes priority over key capture
+        if (activeEditEntry != null && activeEditEntry.isEditing()) {
+            if (activeEditEntry.handleKeyPress(input.key())) {
+                return true;
+            }
+        }
+        if (capturingKey != null) {
+            int keyCode = input.key();
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+                // ESC = set key to "none" (-1)
+                applyCapture(-1);
+                return true;
+            }
+            applyCapture(keyCode);
+            return true;
+        }
+        return super.keyPressed(input);
     }
 }

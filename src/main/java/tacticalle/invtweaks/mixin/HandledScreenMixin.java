@@ -54,6 +54,11 @@ public abstract class HandledScreenMixin {
 
     @Inject(method = "onMouseClick(Lnet/minecraft/screen/slot/Slot;IILnet/minecraft/screen/slot/SlotActionType;)V", at = @At("HEAD"), cancellable = true)
     private void beforeOnMouseClick(Slot slot, int slotId, int button, SlotActionType actionType, CallbackInfo ci) {
+        // Block all slot clicks when HalfSelectorOverlay is active
+        if (tacticalle.invtweaks.HalfSelectorOverlay.isActive()) {
+            ci.cancel();
+            return;
+        }
         if (slot == null) return;
         InvTweaksConfig config = InvTweaksConfig.get();
         long windowHandle = MinecraftClient.getInstance().getWindow().getHandle();
@@ -462,6 +467,23 @@ public abstract class HandledScreenMixin {
 
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
     private void onKeyPressed(KeyInput input, CallbackInfoReturnable<Boolean> cir) {
+        // HalfSelectorOverlay intercepts keys when active
+        if (tacticalle.invtweaks.HalfSelectorOverlay.isActive()) {
+            if (tacticalle.invtweaks.HalfSelectorOverlay.keyPressed(input.key())) {
+                cir.setReturnValue(true);
+                return;
+            }
+            // E key: let it pass through to close inventory (overlay auto-hides)
+            if (input.key() == GLFW.GLFW_KEY_E) {
+                tacticalle.invtweaks.HalfSelectorOverlay.hide();
+                // Don't cancel — let vanilla close the screen
+                return;
+            }
+            // Block all other keys while overlay is active
+            cir.setReturnValue(true);
+            return;
+        }
+
         InvTweaksConfig config = InvTweaksConfig.get();
         if (!config.enableCopyPaste) return;
 
@@ -496,9 +518,95 @@ public abstract class HandledScreenMixin {
             tacticalle.invtweaks.LayoutClipboard.copyLayout(handler, isPlayerOnly);
             cir.setReturnValue(true);
         } else if (keyCode == GLFW.GLFW_KEY_V) {
-            // Paste layout
+            // Paste layout — with size-mismatch pre-check and HalfSelectorOverlay support
             InvTweaksConfig.debugLog("PASTE", "Ctrl+V detected | playerOnly=%s", isPlayerOnly);
-            tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly);
+
+            // If HalfSelectorOverlay is active, ignore Ctrl+V (don't re-trigger)
+            if (tacticalle.invtweaks.HalfSelectorOverlay.isActive()) {
+                cir.setReturnValue(true);
+                return;
+            }
+
+            // Get active clipboard entry to check size mismatch BEFORE calling paste
+            tacticalle.invtweaks.LayoutClipboard.HistoryEntry activeEntry =
+                    tacticalle.invtweaks.LayoutClipboard.getActiveEntry(isPlayerOnly);
+
+            if (activeEntry == null) {
+                tacticalle.invtweaks.InvTweaksOverlay.show("No layout copied", 0xFFFF5555);
+                cir.setReturnValue(true);
+                return;
+            }
+
+            // Check type mismatch
+            if (activeEntry.snapshot.isPlayerInventory != isPlayerOnly) {
+                String clipType = activeEntry.snapshot.isPlayerInventory ? "player inventory" : "container";
+                String currentType = isPlayerOnly ? "player inventory" : "container";
+                tacticalle.invtweaks.InvTweaksOverlay.show(
+                        "Layout was copied from " + clipType + ", can't paste into " + currentType, 0xFFFF5555);
+                cir.setReturnValue(true);
+                return;
+            }
+
+            if (!isPlayerOnly) {
+                int clipSize = activeEntry.snapshot.slotCount;
+                int containerSize = tacticalle.invtweaks.LayoutClipboard.getContainerSlotCount(handler);
+
+                if (clipSize != containerSize) {
+                    // Size mismatch — handle 54↔27 cases
+                    if (clipSize == 54 && containerSize == 27) {
+                        // Show HalfSelectorOverlay
+                        InvTweaksConfig.debugLog("HALF-SELECT", "size mismatch 54->27, showing half selector");
+                        tacticalle.invtweaks.HalfSelectorOverlay.show(
+                                activeEntry.snapshot.slots, isPlayerOnly,
+                                (half) -> {
+                                    Map<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> sliced =
+                                            tacticalle.invtweaks.LayoutClipboard.sliceClipboardHalf(
+                                                    activeEntry.snapshot.slots, half);
+                                    tacticalle.invtweaks.LayoutClipboard.PasteResult result =
+                                            tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly, sliced);
+                                    it_showPasteResult(result);
+                                }
+                        );
+                        cir.setReturnValue(true);
+                        return;
+                    } else if (clipSize == 27 && containerSize == 54) {
+                        // Auto-paste into top rows (slots 0-26) — pass clipboard data as override
+                        InvTweaksConfig.debugLog("HALF-SELECT", "27->54 auto-paste into top rows");
+                        tacticalle.invtweaks.LayoutClipboard.PasteResult result =
+                                tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly,
+                                        activeEntry.snapshot.slots);
+                        // Custom message with "(top half)" suffix
+                        if (result.alreadyMatched) {
+                            tacticalle.invtweaks.InvTweaksOverlay.show("Layout already matches!", 0xFF55FF55);
+                        } else if (result.noMatchingItems) {
+                            tacticalle.invtweaks.InvTweaksOverlay.show("No matching items available", 0xFFFFFF55);
+                        } else if (result.slotsPlaced == result.slotsTotal) {
+                            tacticalle.invtweaks.InvTweaksOverlay.show("Layout pasted (top half)", 0xFF55FF55);
+                            if (result.cursorWasOccupied) {
+                                tacticalle.invtweaks.InvTweaksOverlay.show("Items on cursor held", 0xFFFFFF55);
+                            }
+                        } else if (result.slotsPlaced > 0) {
+                            tacticalle.invtweaks.InvTweaksOverlay.show(
+                                    "Layout partially pasted (" + result.slotsPlaced + "/" + result.slotsTotal + " slots, top half)", 0xFFFFAA00);
+                            tacticalle.invtweaks.InvTweaksOverlay.show("No room for remaining items", 0xFFFFFF55);
+                        } else {
+                            tacticalle.invtweaks.InvTweaksOverlay.show("Could not paste layout \u2014 no room", 0xFFFF5555);
+                        }
+                        cir.setReturnValue(true);
+                        return;
+                    } else {
+                        // Other size mismatches still blocked
+                        tacticalle.invtweaks.InvTweaksOverlay.show("Layout size incompatible", 0xFFFFFF55);
+                        cir.setReturnValue(true);
+                        return;
+                    }
+                }
+            }
+
+            // Normal paste (sizes match or player-only)
+            tacticalle.invtweaks.LayoutClipboard.PasteResult result =
+                    tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly);
+            it_showPasteResult(result);
             cir.setReturnValue(true);
         } else if (keyCode == GLFW.GLFW_KEY_X) {
             // Cut layout
@@ -507,6 +615,51 @@ public abstract class HandledScreenMixin {
             cir.setReturnValue(true);
         }
     }
+
+    // ========== PASTE RESULT DISPLAY ==========
+
+    @Unique
+    private void it_showPasteResult(tacticalle.invtweaks.LayoutClipboard.PasteResult result) {
+        if (result.alreadyMatched) {
+            tacticalle.invtweaks.InvTweaksOverlay.show("Layout already matches!", 0xFF55FF55);
+            return;
+        }
+        if (result.noClipboard) {
+            tacticalle.invtweaks.InvTweaksOverlay.show("No layout copied", 0xFFFF5555);
+            return;
+        }
+        if (result.noMatchingItems) {
+            tacticalle.invtweaks.InvTweaksOverlay.show("No matching items available", 0xFFFFFF55);
+            return;
+        }
+        if (result.sizeMismatch) {
+            tacticalle.invtweaks.InvTweaksOverlay.show("Layout size incompatible", 0xFFFFFF55);
+            return;
+        }
+        if (result.typeMismatch) {
+            tacticalle.invtweaks.InvTweaksOverlay.show(result.errorMessage, 0xFFFF5555);
+            return;
+        }
+
+        // Success case — determine message based on how many slots were placed
+        if (result.slotsPlaced == result.slotsTotal) {
+            tacticalle.invtweaks.InvTweaksOverlay.show("Layout pasted", 0xFF55FF55);
+            if (result.cursorWasOccupied) {
+                tacticalle.invtweaks.InvTweaksOverlay.show("Items on cursor held", 0xFFFFFF55);
+            }
+        } else if (result.slotsPlaced > 0) {
+            tacticalle.invtweaks.InvTweaksOverlay.show(
+                    "Layout partially pasted (" + result.slotsPlaced + "/" + result.slotsTotal + " slots)", 0xFFFFAA00);
+            tacticalle.invtweaks.InvTweaksOverlay.show("No room for remaining items", 0xFFFFFF55);
+        } else {
+            tacticalle.invtweaks.InvTweaksOverlay.show("Could not paste layout \u2014 no room", 0xFFFF5555);
+        }
+
+        InvTweaksConfig.debugLog("PASTE", "result displayed | placed=%d/%d | cursor=%s",
+                result.slotsPlaced, result.slotsTotal, result.cursorWasOccupied);
+    }
+
+    // ========== HALF-SELECTOR OVERLAY DELEGATION ==========
 
     // ========== SCROLL TRANSFER ==========
 
