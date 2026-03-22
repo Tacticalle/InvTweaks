@@ -254,15 +254,12 @@ public class LayoutClipboard {
             RegistryOps<NbtElement> ops = RegistryOps.of(NbtOps.INSTANCE, mc.world.getRegistryManager());
             var result = ItemStack.CODEC.encodeStart(ops, stack);
             NbtElement nbt = result.result().orElse(null);
-            InvTweaksConfig.debugLog("CLIPBOARD", "serializeComponents: item=%s fullNbt=%s", stack.getItem(), nbt);
             if (nbt instanceof NbtCompound compound) {
                 if (compound.contains("components")) {
                     String comp = compound.get("components").toString();
-                    InvTweaksConfig.debugLog("CLIPBOARD", "serializeComponents: components=%s", comp);
                     return comp;
                 }
             }
-            InvTweaksConfig.debugLog("CLIPBOARD", "serializeComponents: no components key found, returning empty string");
         } catch (Exception e) {
             InvTweaksConfig.debugLog("CLIPBOARD", "Failed to serialize components: %s", e.getMessage());
         }
@@ -615,7 +612,34 @@ public class LayoutClipboard {
             }
         }
         if (alreadyMatches) {
-            return PasteResult.alreadyMatched();
+            // Check if any target slot could receive more items (quantity maximization)
+            boolean canTopUp = false;
+            for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
+                int slotId = entry.getKey();
+                SlotData desired = entry.getValue();
+                if (desired.item() == null) continue;
+                ItemStack current = handler.slots.get(slotId).getStack();
+                int maxStack = current.getMaxCount();
+                if (current.getCount() < maxStack) {
+                    // Check if surplus items of this type exist elsewhere
+                    for (int srcSlot : allAccessibleSlots) {
+                        if (srcSlot == slotId) continue;
+                        ItemStack srcStack = handler.slots.get(srcSlot).getStack();
+                        if (!srcStack.isEmpty() && srcStack.getItem() == desired.item()) {
+                            // A source has surplus if it's not a target for this item type
+                            SlotData srcTarget = targetLayout.get(srcSlot);
+                            if (srcTarget == null || srcTarget.item() != desired.item()) {
+                                canTopUp = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (canTopUp) break;
+                }
+            }
+            if (!canTopUp) {
+                return PasteResult.alreadyMatched();
+            }
         }
 
         // Two-pass partial paste logic
@@ -653,7 +677,7 @@ public class LayoutClipboard {
 
         // Pass 1
         matchedSlots = executePastePass(handler, im, player, targetLayout, allAccessibleSlots,
-                clipboardItemTypes, isPlayerOnly, false, failedSlots);
+                clipboardItemTypes, isPlayerOnly, false, failedSlots, Collections.emptySet());
 
         // Pass 2: retry failed slots (displacement in pass 1 may have freed slots)
         if (!failedSlots.isEmpty()) {
@@ -662,9 +686,23 @@ public class LayoutClipboard {
             for (int failedSlot : failedSlots) {
                 retryLayout.put(failedSlot, targetLayout.get(failedSlot));
             }
+            // Protect pass-1 filled slots from being used as sources in pass 2
+            Set<Integer> pass1FilledSlots = new HashSet<>();
+            for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
+                int slotId = entry.getKey();
+                if (!failedSlots.contains(slotId)) {
+                    SlotData desired = entry.getValue();
+                    if (desired.item() != null) {
+                        ItemStack current = handler.slots.get(slotId).getStack();
+                        if (!current.isEmpty() && current.getItem() == desired.item()) {
+                            pass1FilledSlots.add(slotId);
+                        }
+                    }
+                }
+            }
             Set<Integer> retryFailed = new HashSet<>();
             int pass2Matched = executePastePass(handler, im, player, retryLayout, allAccessibleSlots,
-                    clipboardItemTypes, isPlayerOnly, false, retryFailed);
+                    clipboardItemTypes, isPlayerOnly, false, retryFailed, pass1FilledSlots);
             matchedSlots += pass2Matched;
         }
 
@@ -697,7 +735,7 @@ public class LayoutClipboard {
                                          PlayerEntity player, Map<Integer, SlotData> targetLayout,
                                          Set<Integer> allAccessibleSlots, Set<Item> clipboardItemTypes,
                                          boolean isPlayerOnly, boolean cursorOccupied,
-                                         Set<Integer> failedSlots) {
+                                         Set<Integer> failedSlots, Set<Integer> protectedSlots) {
         int matchedSlots = 0;
 
         for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
@@ -765,7 +803,7 @@ public class LayoutClipboard {
                 }
                 if (!cursorOccupied) {
                     addMore(handler, im, player, targetSlotId, desired.item(),
-                            desired.components(), maxStack - currentStack.getCount(), allAccessibleSlots, targetLayout, isPlayerOnly);
+                            desired.components(), maxStack - currentStack.getCount(), allAccessibleSlots, targetLayout, isPlayerOnly, protectedSlots);
                 }
                 // When cursor is occupied, we can't do addMore (it uses PICKUP), but the type matches, so count it
                 matchedSlots++;
@@ -797,7 +835,7 @@ public class LayoutClipboard {
                         desired.components(), allAccessibleSlots, targetLayout);
             } else {
                 placed = sourceItem(handler, im, player, targetSlotId, desired.item(), maxStack,
-                        desired.components(), allAccessibleSlots, targetLayout, isPlayerOnly);
+                        desired.components(), allAccessibleSlots, targetLayout, isPlayerOnly, protectedSlots);
             }
             if (placed) {
                 matchedSlots++;
@@ -1082,10 +1120,18 @@ public class LayoutClipboard {
                                     String desiredComponents, int needed,
                                     Set<Integer> allAccessible, Map<Integer, SlotData> targetLayout,
                                     boolean isPlayerOnly) {
+        return addMore(handler, im, player, targetSlotId, itemType, desiredComponents, needed, allAccessible, targetLayout, isPlayerOnly, Collections.emptySet());
+    }
+
+    private static boolean addMore(ScreenHandler handler, ClientPlayerInteractionManager im,
+                                    PlayerEntity player, int targetSlotId, Item itemType,
+                                    String desiredComponents, int needed,
+                                    Set<Integer> allAccessible, Map<Integer, SlotData> targetLayout,
+                                    boolean isPlayerOnly, Set<Integer> protectedSlots) {
         int remaining = needed;
 
         List<Integer> rankedSources = rankSourceSlots(handler, targetSlotId, itemType,
-                desiredComponents, allAccessible, targetLayout);
+                desiredComponents, allAccessible, targetLayout, protectedSlots);
 
         for (int srcSlot : rankedSources) {
             if (remaining <= 0) break;
@@ -1159,10 +1205,18 @@ public class LayoutClipboard {
                                        String desiredComponents,
                                        Set<Integer> allAccessible, Map<Integer, SlotData> targetLayout,
                                        boolean isPlayerOnly) {
+        return sourceItem(handler, im, player, targetSlotId, itemType, desiredCount, desiredComponents, allAccessible, targetLayout, isPlayerOnly, Collections.emptySet());
+    }
+
+    private static boolean sourceItem(ScreenHandler handler, ClientPlayerInteractionManager im,
+                                       PlayerEntity player, int targetSlotId, Item itemType, int desiredCount,
+                                       String desiredComponents,
+                                       Set<Integer> allAccessible, Map<Integer, SlotData> targetLayout,
+                                       boolean isPlayerOnly, Set<Integer> protectedSlots) {
         int remaining = desiredCount;
 
         List<Integer> rankedSources = rankSourceSlots(handler, targetSlotId, itemType,
-                desiredComponents, allAccessible, targetLayout);
+                desiredComponents, allAccessible, targetLayout, protectedSlots);
 
         for (int srcSlot : rankedSources) {
             if (remaining <= 0) break;
@@ -1289,10 +1343,19 @@ public class LayoutClipboard {
                                                   Item itemType, String desiredComponents,
                                                   Set<Integer> allAccessible,
                                                   Map<Integer, SlotData> targetLayout) {
+        return rankSourceSlots(handler, targetSlotId, itemType, desiredComponents, allAccessible, targetLayout, Collections.emptySet());
+    }
+
+    private static List<Integer> rankSourceSlots(ScreenHandler handler, int targetSlotId,
+                                                  Item itemType, String desiredComponents,
+                                                  Set<Integer> allAccessible,
+                                                  Map<Integer, SlotData> targetLayout,
+                                                  Set<Integer> protectedSlots) {
         List<int[]> candidates = new ArrayList<>();
 
         for (int srcSlot : allAccessible) {
             if (srcSlot == targetSlotId) continue;
+            if (protectedSlots.contains(srcSlot)) continue;
             ItemStack srcStack = handler.slots.get(srcSlot).getStack();
             if (srcStack.isEmpty() || srcStack.getItem() != itemType) continue;
 

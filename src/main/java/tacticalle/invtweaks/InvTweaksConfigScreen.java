@@ -274,7 +274,6 @@ public class InvTweaksConfigScreen extends Screen {
         addPerTweakKeyRow("bundleInsertBundle", "Bundle Insert (cursor bundle)", keyBtnW);
         addPerTweakKeyRow("bundleInsertItems", "Bundle Insert (cursor items)", keyBtnW);
         addPerTweakKeyRow("hotbarModifiers", "Hotbar Button Modifiers", keyBtnW);
-        addPerTweakKeyRow("fillExisting", "Fill Existing Stacks", keyBtnW);
     }
 
     private void addPerTweakKeyRow(String tweakName, String displayName, int keyBtnW) {
@@ -398,21 +397,6 @@ public class InvTweaksConfigScreen extends Screen {
             if (capturingButton != null) {
                 capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
             }
-        } else if (capturingKey.equals("fillExistingKey")) {
-            config.fillExistingKey = keyCode;
-            if (capturingButton != null) {
-                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
-            }
-        } else if (capturingKey.equals("scrollModifierKey")) {
-            config.scrollLeave1Key = keyCode;
-            if (capturingButton != null) {
-                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
-            }
-        } else if (capturingKey.equals("throwAllBut1Key")) {
-            config.throwAllBut1Key = keyCode;
-            if (capturingButton != null) {
-                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
-            }
         } else if (capturingKey.equals("throwHalfKey")) {
             config.throwHalfKey = keyCode;
             if (capturingButton != null) {
@@ -448,18 +432,6 @@ public class InvTweaksConfigScreen extends Screen {
             KeyBinding configKey = InvTweaksClient.openConfigKey;
             openConfigKeyBtn.setMessage(Text.literal(
                     configKey != null ? configKey.getBoundKeyLocalizedText().getString() : "?"));
-        } else if (capturingKey.equals("fillExistingKey")) {
-            if (capturingButton != null) {
-                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.fillExistingKey)));
-            }
-        } else if (capturingKey.equals("scrollModifierKey")) {
-            if (capturingButton != null) {
-                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.scrollLeave1Key)));
-            }
-        } else if (capturingKey.equals("throwAllBut1Key")) {
-            if (capturingButton != null) {
-                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.throwAllBut1Key)));
-            }
         } else if (capturingKey.equals("fillExistingKey")) {
             if (capturingButton != null) {
                 capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.fillExistingKey)));

@@ -665,7 +665,7 @@ public abstract class HandledScreenMixin {
 
     @Inject(method = "mouseScrolled", at = @At("HEAD"), cancellable = true)
     private void onMouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount, CallbackInfoReturnable<Boolean> cir) {
-        LOGGER.info("[IT:SCROLL-RAW] verticalAmount={} horizontalAmount={}", verticalAmount, horizontalAmount);
+        InvTweaksConfig.debugLog("SCROLL-RAW", "verticalAmount=%s horizontalAmount=%s", verticalAmount, horizontalAmount);
         InvTweaksConfig config = InvTweaksConfig.get();
         if (!config.enableScrollTransfer) return;
 

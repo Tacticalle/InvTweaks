@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/Future_Additions.md",
+                "file": "docs/BATCH_TEMPLATE.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Future_Additions"
+              "title": "BATCH_TEMPLATE"
             }
           }
         ],
@@ -200,17 +200,31 @@
   },
   "active": "e131a55a97cffe9b",
   "lastOpenFiles": [
-    "build/libs/invtweaks-1.3.0.jar.tmp",
-    "build/libs/invtweaks-1.3.0-sources.jar",
-    "build/devlibs/invtweaks-1.3.0-sources.jar",
-    "build/libs/invtweaks-1.3.0.jar",
-    "build/devlibs/invtweaks-1.3.0-dev.jar",
-    "build/classes/java/main/tacticalle/invtweaks/ClipboardHistoryScreen$PreviewSlotInfo.class",
-    "build/tmp/compileJava/compileTransaction/stash-dir/InvTweaksConfigScreen$ConfigEntryList.class.uniqueId25",
-    "build/tmp/compileJava/compileTransaction/stash-dir/InvTweaksConfigScreen$KeyBindEntry.class.uniqueId24",
-    "build/tmp/compileJava/compileTransaction/stash-dir/InvTweaksConfigScreen$FeatureEntry.class.uniqueId23",
-    "build/tmp/compileJava/compileTransaction/stash-dir/InvTweaksConfigScreen$HeaderEntry.class.uniqueId22",
-    "build/tmp/compileJava/compileTransaction/stash-dir/LayoutClipboard.class.uniqueId21",
+    "build/tmp/compileJava/compileTransaction/stash-dir/LayoutClipboard$PasteResult.class.uniqueId8",
+    "build/tmp/compileJava/compileTransaction/stash-dir/InvTweaksOverlay$OverlayMessage.class.uniqueId7",
+    "build/tmp/compileJava/compileTransaction/stash-dir/InvTweaksOverlay.class.uniqueId6",
+    "build/tmp/compileJava/compileTransaction/stash-dir/LayoutClipboard$HistoryEntry.class.uniqueId5",
+    "build/tmp/compileJava/compileTransaction/stash-dir/LayoutClipboard$LayoutSnapshot.class.uniqueId4",
+    "build/tmp/compileJava/compileTransaction/stash-dir/LayoutClipboard$SlotData.class.uniqueId3",
+    "build/tmp/compileJava/compileTransaction/stash-dir/InvTweaksClient.class.uniqueId2",
+    "build/tmp/compileJava/compileTransaction/stash-dir/LayoutClipboard.class.uniqueId1",
+    "build/tmp/compileJava/compileTransaction/stash-dir/HandledScreenMixin.class.uniqueId0",
+    "build/libs/invtweaks-1.4.1-sources.jar",
+    "build/devlibs/invtweaks-1.4.1-sources.jar",
+    "docs/archive/batch-11-bug-sweep.md",
+    "docs/archive/batch-11-bug-sweep-prompt.md",
+    "docs/archive/batch-11-homebase.md",
+    "docs/Future_Additions.md",
+    "docs/archive/InvTweaks_Project_Organizer_Prompt.md",
+    "docs/archive/Future_Additions.md",
+    "docs/V2_ROADMAP.md",
+    "docs/BATCH_TEMPLATE.md",
+    "docs/archive/batch-10b.1-scope.md",
+    "docs/archive/homebase-chat4-handoff.md",
+    "docs/archive/homebase-chat3-handoff.md",
+    "docs/archive/post-batch-10a.1-prompt.md",
+    "docs/archive/batch-10a.1-cowork-prompt.md",
+    "docs/DESIGN_DECISIONS.md",
     "WORKFLOW.md",
     "MASTER_SHEET.md",
     "docs/WORKFLOW copy.md",
@@ -222,15 +236,7 @@
     "docs/archive/batch-9-cowork-prompt.md",
     "docs/homebase-chat-pattern.md",
     "docs/archive/batch-9-clipboard-paste-fixes.md",
-    "docs/InvTweaks_Project_Instructions.md",
-    "docs/Future_Additions.md",
-    "docs/InvTweaks_Project_Organizer_Prompt.md",
     "build/resources/main/assets/invtweaks/icon.png",
-    "docs/WORKFLOW.md",
-    "src/main/resources/assets/invtweaks/icon.png",
-    "CHANGELOG.md",
-    "README.md",
-    "docs/DEFERRED_FEATURES.md",
-    "docs/BATCH_TEMPLATE.md"
+    "src/main/resources/assets/invtweaks/icon.png"
   ]
 }

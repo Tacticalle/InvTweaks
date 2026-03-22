@@ -54,14 +54,8 @@ public class InvTweaksConfig {
     public int bundleInsertBundleOnly1Key = -1;
     public int bundleInsertItemsAllBut1Key = -1;
     public int bundleInsertItemsOnly1Key = -1;
-    public int throwHalfAllBut1Key = -1;
-    public int throwHalfOnly1Key = -1;
     public int hotbarModifiersAllBut1Key = -1;
     public int hotbarModifiersOnly1Key = -1;
-    public int fillExistingAllBut1Key = -1;
-    public int fillExistingOnly1Key = -1;
-    public int scrollTransferAllBut1Key = -1;
-    public int scrollTransferOnly1Key = -1;
 
     // Clipboard history
     public int clipboardMaxHistory = 50;              // max entries to keep (range 5-200)
@@ -83,10 +77,7 @@ public class InvTweaksConfig {
             case "bundleExtract" -> bundleExtractAllBut1Key;
             case "bundleInsertBundle" -> bundleInsertBundleAllBut1Key;
             case "bundleInsertItems" -> bundleInsertItemsAllBut1Key;
-            case "throwHalf" -> throwHalfAllBut1Key;
             case "hotbarModifiers" -> hotbarModifiersAllBut1Key;
-            case "fillExisting" -> fillExistingAllBut1Key;
-            case "scrollTransfer" -> scrollTransferAllBut1Key;
             default -> -1;
         };
         return perTweak != -1 ? perTweak : allBut1Key;
@@ -103,10 +94,7 @@ public class InvTweaksConfig {
             case "bundleExtract" -> bundleExtractOnly1Key;
             case "bundleInsertBundle" -> bundleInsertBundleOnly1Key;
             case "bundleInsertItems" -> bundleInsertItemsOnly1Key;
-            case "throwHalf" -> throwHalfOnly1Key;
             case "hotbarModifiers" -> hotbarModifiersOnly1Key;
-            case "fillExisting" -> fillExistingOnly1Key;
-            case "scrollTransfer" -> scrollTransferOnly1Key;
             default -> -1;
         };
         return perTweak != -1 ? perTweak : only1Key;
@@ -122,10 +110,7 @@ public class InvTweaksConfig {
             case "bundleExtract" -> bundleExtractAllBut1Key != -1 || bundleExtractOnly1Key != -1;
             case "bundleInsertBundle" -> bundleInsertBundleAllBut1Key != -1 || bundleInsertBundleOnly1Key != -1;
             case "bundleInsertItems" -> bundleInsertItemsAllBut1Key != -1 || bundleInsertItemsOnly1Key != -1;
-            case "throwHalf" -> throwHalfAllBut1Key != -1 || throwHalfOnly1Key != -1;
             case "hotbarModifiers" -> hotbarModifiersAllBut1Key != -1 || hotbarModifiersOnly1Key != -1;
-            case "fillExisting" -> fillExistingAllBut1Key != -1 || fillExistingOnly1Key != -1;
-            case "scrollTransfer" -> scrollTransferAllBut1Key != -1 || scrollTransferOnly1Key != -1;
             default -> false;
         };
     }
@@ -140,10 +125,7 @@ public class InvTweaksConfig {
             case "bundleExtract" -> bundleExtractAllBut1Key = keyCode;
             case "bundleInsertBundle" -> bundleInsertBundleAllBut1Key = keyCode;
             case "bundleInsertItems" -> bundleInsertItemsAllBut1Key = keyCode;
-            case "throwHalf" -> throwHalfAllBut1Key = keyCode;
             case "hotbarModifiers" -> hotbarModifiersAllBut1Key = keyCode;
-            case "fillExisting" -> fillExistingAllBut1Key = keyCode;
-            case "scrollTransfer" -> scrollTransferAllBut1Key = keyCode;
         }
     }
 
@@ -154,10 +136,7 @@ public class InvTweaksConfig {
             case "bundleExtract" -> bundleExtractOnly1Key = keyCode;
             case "bundleInsertBundle" -> bundleInsertBundleOnly1Key = keyCode;
             case "bundleInsertItems" -> bundleInsertItemsOnly1Key = keyCode;
-            case "throwHalf" -> throwHalfOnly1Key = keyCode;
             case "hotbarModifiers" -> hotbarModifiersOnly1Key = keyCode;
-            case "fillExisting" -> fillExistingOnly1Key = keyCode;
-            case "scrollTransfer" -> scrollTransferOnly1Key = keyCode;
         }
     }
 
@@ -325,7 +304,7 @@ public class InvTweaksConfig {
      */
     public boolean isAnyModifierPressed() {
         if (isKeyPressed(allBut1Key) || isKeyPressed(only1Key)) return true;
-        String[] tweaks = {"clickPickup", "shiftClick", "bundleExtract", "bundleInsertBundle", "bundleInsertItems", "throwHalf", "hotbarModifiers", "fillExisting", "scrollTransfer"};
+        String[] tweaks = {"clickPickup", "shiftClick", "bundleExtract", "bundleInsertBundle", "bundleInsertItems", "hotbarModifiers"};
         for (String tweak : tweaks) {
             if (hasCustomKeys(tweak)) {
                 int ab1 = getEffectiveAllBut1Key(tweak);
