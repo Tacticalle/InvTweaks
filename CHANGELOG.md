@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.1] - 2026-03-22
+
+### Bug Fixes
+- **Paste Bounce with Cursor Item** — Fixed pass 2 retry logic cannibalizing correctly-filled target slots when cursor holds items, causing items to bounce between two slots on repeated Ctrl+V. Pass 2 now protects slots filled in pass 1.
+- **"Already Matches" Blocking Quantity Maximization** — Paste now checks whether stacks could be topped up even when all item types are correct, instead of showing "Layout already matches!" when surplus items are available
+- **Removed Orphaned Config Fields** — Removed 6 dead per-tweak key override fields for throwHalf, fillExisting, and scrollTransfer that had no effect (these tweaks use single dedicated keys, not the allBut1/only1 pair system). Old configs are handled gracefully.
+- **Ungated Scroll Debug Log** — `[IT:SCROLL-RAW]` log line now respects the `enableDebugLogging` setting instead of firing on every scroll event
+- **Verbose Serialize Logging** — Removed per-item debug log lines from `serializeComponents()` that produced excessive output when debug logging was enabled
+- **Duplicate Config Screen Branches** — Removed duplicate `else if` branches in key capture `applyCapture()` and `cancelCapture()` methods
+
 ## [1.4.0] - 2026-03-20
 
 ### Features
