@@ -1,6 +1,7 @@
 package tacticalle.invtweaks;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.Element;
@@ -20,8 +21,11 @@ import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Full-screen clipboard history browser with item preview grid.
@@ -49,6 +53,8 @@ public class ClipboardHistoryScreen extends Screen {
     private static final int PANEL_BG = 0xFF2B2B2B;
     private static final int PANEL_BORDER = 0xFF555555;
 
+    private static final int MULTI_SELECT_BG = 0x404488FF;
+
     /** Tracks a rendered preview slot's screen bounds and item for hover tooltip. */
     private record PreviewSlotInfo(int x, int y, int size, ItemStack stack) {}
 
@@ -59,6 +65,12 @@ public class ClipboardHistoryScreen extends Screen {
     private HistoryEntryList entryList;
     private int hoveredEntryIndex = -1;
     private int highlightedIndex = -1; // which entry is highlighted for deletion
+
+    // Multi-select state
+    private final Set<Integer> multiSelected = new LinkedHashSet<>();
+    private int selectionAnchor = -1;
+    private boolean confirmingBulkDelete = false;
+    private ButtonWidget deleteButton;
 
     // Layout
     private int leftPanelX, leftPanelWidth;
@@ -104,24 +116,73 @@ public class ClipboardHistoryScreen extends Screen {
         int totalBtnWidth = btnW * 3 + btnGap * 2;
         int btnStartX = (this.width - totalBtnWidth) / 2;
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("Delete"), button -> {
-            if (highlightedIndex >= 0 && highlightedIndex < LayoutClipboard.getHistory().size()) {
-                LayoutClipboard.removeHistoryEntry(highlightedIndex);
-                ClipboardStorage.save();
-                highlightedIndex = -1;
-                rebuildEntryList();
-            }
-        }).dimensions(btnStartX, btnY, btnW, BUTTON_HEIGHT).build());
+        deleteButton = ButtonWidget.builder(Text.literal("Delete"), button -> {
+            onDeleteButtonClicked();
+        }).dimensions(btnStartX, btnY, btnW, BUTTON_HEIGHT).build();
+        addDrawableChild(deleteButton);
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Delete All"), button -> {
+            multiSelected.clear();
+            selectionAnchor = -1;
+            confirmingBulkDelete = false;
             LayoutClipboard.clearHistory();
             hoveredEntryIndex = -1;
+            highlightedIndex = -1;
+            updateDeleteButtonText();
             rebuildEntryList();
         }).dimensions(btnStartX + btnW + btnGap, btnY, btnW, BUTTON_HEIGHT).build());
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Close"), button -> {
             close();
         }).dimensions(btnStartX + 2 * (btnW + btnGap), btnY, btnW, BUTTON_HEIGHT).build());
+    }
+
+    private void onDeleteButtonClicked() {
+        if (multiSelected.size() >= 2) {
+            if (!confirmingBulkDelete) {
+                confirmingBulkDelete = true;
+                deleteButton.setMessage(Text.literal("Confirm?"));
+            } else {
+                performBulkDelete();
+            }
+        } else {
+            if (highlightedIndex >= 0 && highlightedIndex < LayoutClipboard.getHistory().size()) {
+                LayoutClipboard.removeHistoryEntry(highlightedIndex);
+                ClipboardStorage.save();
+                highlightedIndex = -1;
+                confirmingBulkDelete = false;
+                updateDeleteButtonText();
+                rebuildEntryList();
+            }
+        }
+    }
+
+    private void performBulkDelete() {
+        List<Integer> sorted = new ArrayList<>(multiSelected);
+        Collections.sort(sorted, Collections.reverseOrder());
+        for (int idx : sorted) {
+            if (idx >= 0 && idx < LayoutClipboard.getHistory().size()) {
+                LayoutClipboard.removeHistoryEntry(idx);
+            }
+        }
+        ClipboardStorage.save();
+        multiSelected.clear();
+        selectionAnchor = -1;
+        highlightedIndex = -1;
+        confirmingBulkDelete = false;
+        updateDeleteButtonText();
+        rebuildEntryList();
+    }
+
+    private void updateDeleteButtonText() {
+        if (deleteButton == null) return;
+        if (confirmingBulkDelete) {
+            deleteButton.setMessage(Text.literal("Confirm?"));
+        } else if (multiSelected.size() >= 2) {
+            deleteButton.setMessage(Text.literal("Del (" + multiSelected.size() + ")"));
+        } else {
+            deleteButton.setMessage(Text.literal("Delete"));
+        }
     }
 
     private void populateEntryList() {
@@ -333,9 +394,16 @@ public class ClipboardHistoryScreen extends Screen {
         // Render hover tooltip (drawn last so it's on top of everything)
         for (PreviewSlotInfo slotInfo : previewSlots) {
             if (mouseX >= slotInfo.x && mouseX < slotInfo.x + slotInfo.size
-                    && mouseY >= slotInfo.y && mouseY < slotInfo.y + slotInfo.size) {
+                    && mouseY >= slotInfo.y && mouseY < slotInfo.y + slotInfo.size
+                    && !slotInfo.stack.isEmpty()) {
+                MinecraftClient mc = MinecraftClient.getInstance();
+                ClientPlayerEntity player = mc.player;
+                Item.TooltipContext tooltipCtx = player != null
+                        ? Item.TooltipContext.create(MinecraftClient.getInstance().world)
+                        : Item.TooltipContext.DEFAULT;
+                TooltipType tooltipType = mc.options.advancedItemTooltips ? TooltipType.ADVANCED : TooltipType.BASIC;
                 context.drawTooltip(this.textRenderer,
-                        slotInfo.stack.getTooltip(Item.TooltipContext.DEFAULT, null, TooltipType.BASIC),
+                        slotInfo.stack.getTooltip(tooltipCtx, player, tooltipType),
                         mouseX, mouseY);
                 break;
             }
@@ -425,6 +493,22 @@ public class ClipboardHistoryScreen extends Screen {
         if (client != null) client.setScreen(parentScreen);
     }
 
+    // ========== Modifier key helpers (GLFW-based, not Screen.hasXxxDown) ==========
+
+    private static boolean isCtrlOrCmdHeld() {
+        long wh = MinecraftClient.getInstance().getWindow().getHandle();
+        return GLFW.glfwGetKey(wh, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS
+            || GLFW.glfwGetKey(wh, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS
+            || GLFW.glfwGetKey(wh, GLFW.GLFW_KEY_LEFT_SUPER) == GLFW.GLFW_PRESS
+            || GLFW.glfwGetKey(wh, GLFW.GLFW_KEY_RIGHT_SUPER) == GLFW.GLFW_PRESS;
+    }
+
+    private static boolean isShiftHeld() {
+        long wh = MinecraftClient.getInstance().getWindow().getHandle();
+        return GLFW.glfwGetKey(wh, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS
+            || GLFW.glfwGetKey(wh, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
+    }
+
     // ========== Entry List ==========
 
     private class HistoryEntryList extends ElementListWidget<HistoryListEntry> {
@@ -483,13 +567,18 @@ public class ClipboardHistoryScreen extends Screen {
                 hoveredEntryIndex = index;
             }
 
+            // Multi-select highlight
+            if (multiSelected.contains(index)) {
+                context.fill(x - 2, y - 1, x + w + 2, y + ROW_HEIGHT - 3, MULTI_SELECT_BG);
+            }
+
             // Visual highlight: highlighted entry gets a light blue border
-            if (highlightedIndex == index) {
+            if (highlightedIndex == index && !multiSelected.contains(index)) {
                 context.fill(x - 2, y - 1, x + w + 2, y + ROW_HEIGHT - 3, 0x6055AAFF); // light blue bg
             }
 
             // Hover highlight (dimmer than selected)
-            if (hovered && highlightedIndex != index) {
+            if (hovered && highlightedIndex != index && !multiSelected.contains(index)) {
                 context.fill(x - 2, y - 1, x + w + 2, y + ROW_HEIGHT - 3, 0x40FFFFFF);
             }
 
@@ -519,10 +608,39 @@ public class ClipboardHistoryScreen extends Screen {
             if (selectBtn.mouseClicked(click, focused)) {
                 return true;
             }
-            // Otherwise, clicking the row highlights it for deletion
+
             if (click.button() == 0) {
-                highlightedIndex = index;
-                return true;
+                if (isCtrlOrCmdHeld()) {
+                    // Ctrl/Cmd+click: toggle individual entry in multi-selection
+                    if (multiSelected.contains(index)) {
+                        multiSelected.remove(index);
+                    } else {
+                        multiSelected.add(index);
+                    }
+                    selectionAnchor = index;
+                    confirmingBulkDelete = false;
+                    updateDeleteButtonText();
+                    return true;
+                } else if (isShiftHeld()) {
+                    // Shift+click: range select from anchor to this index
+                    int anchor = selectionAnchor >= 0 ? selectionAnchor : 0;
+                    int from = Math.min(anchor, index);
+                    int to = Math.max(anchor, index);
+                    for (int i = from; i <= to; i++) {
+                        multiSelected.add(i);
+                    }
+                    confirmingBulkDelete = false;
+                    updateDeleteButtonText();
+                    return true;
+                } else {
+                    // Normal click: clear multi-selection, set highlight for single select
+                    multiSelected.clear();
+                    selectionAnchor = index;
+                    confirmingBulkDelete = false;
+                    highlightedIndex = index;
+                    updateDeleteButtonText();
+                    return true;
+                }
             }
             return false;
         }
