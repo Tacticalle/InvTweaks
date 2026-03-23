@@ -48,6 +48,9 @@ public class ClipboardStorage {
                 if (entry.entryType != null) {
                     entryObj.addProperty("entryType", entry.entryType);
                 }
+                if (entry.bundleColor != -1) {
+                    entryObj.addProperty("bundleColor", entry.bundleColor);
+                }
 
                 JsonObject slotsObj = new JsonObject();
                 for (Map.Entry<Integer, LayoutClipboard.SlotData> slotEntry : entry.snapshot.slots.entrySet()) {
@@ -144,7 +147,9 @@ public class ClipboardStorage {
                     }
 
                     LayoutClipboard.LayoutSnapshot snapshot = new LayoutClipboard.LayoutSnapshot(slotCount, slots, isPlayerInventory);
-                    entries.add(new LayoutClipboard.HistoryEntry(snapshot, label, timestamp, playtimeMinutes, containerTitle, entryType));
+                    LayoutClipboard.HistoryEntry entry = new LayoutClipboard.HistoryEntry(snapshot, label, timestamp, playtimeMinutes, containerTitle, entryType);
+                    entry.bundleColor = entryObj.has("bundleColor") ? entryObj.get("bundleColor").getAsInt() : -1;
+                    entries.add(entry);
                 }
             }
 

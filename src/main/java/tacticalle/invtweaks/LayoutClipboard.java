@@ -1782,7 +1782,6 @@ public class LayoutClipboard {
         // Store bundle dye color if present
         DyedColorComponent dyedColor = bundleStack.get(DataComponentTypes.DYED_COLOR);
         if (dyedColor != null) {
-            entry.bundleColor = dyedColor.rgb();
         }
 
         // Deduplication
