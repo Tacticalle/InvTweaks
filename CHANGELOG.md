@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.6.1] - 2026-03-22
+
+### Bug Fixes
+- **Fixed cut showing two overlay messages** — Cut on a bundle no longer shows both a copy message and a cut message. The copy step is now silent when triggered by cut.
+- **Fixed cut message formatting** — Bundle cut message now shows "Bundle layout copied (cut not supported)" in green instead of orange
+- **Fixed bundle item tooltips in clipboard history** — Bundles stored as items inside clipboard entries now show their graphical contents preview on hover instead of a text-only tooltip
+- **Fixed player inventory overlay not rendering** — Overlay messages ("Layout copied", etc.) now appear correctly in the player-only inventory screen (E key). Previously, `InventoryScreen`'s render path bypassed the mixin injection point. Changed injection from `render` to `renderMain` at TAIL.
+- **Improved death snapshot paste displacement** — Smart displacement now checks if displaced items can go directly to their intended target slot before falling back to empty non-target slots, reducing cascading moves
+
+### Changes
+- **Dyed bundle label color** — Bundle entries in the clipboard history browser now reflect the bundle's dye color in their label text (e.g., a red-dyed bundle shows a red label instead of the default orange)
+- **License change** — Switched from MIT to a custom source-available license (ARR) as of v1.6.0. See LICENSE.md for full terms. Versions prior to 1.6.0 remain under the MIT License.
+
 ## [1.6.0] - 2026-03-22
 
 ### Features
