@@ -33,6 +33,9 @@ import java.util.*;
  */
 public class LayoutClipboard {
 
+    /** Component strings that have already failed reconstruction — log once, then suppress. */
+    private static final Set<String> failedComponentStrings = new HashSet<>();
+
     /**
      * A snapshot of one slot's contents.
      * The components field stores serialized NBT component data (null for simple items or old entries).
@@ -292,7 +295,9 @@ public class LayoutClipboard {
                 return reconstructed;
             }
         } catch (Exception e) {
-            InvTweaksConfig.debugLog("CLIPBOARD", "Failed to reconstruct stack: %s", e.getMessage());
+            if (failedComponentStrings.add(components)) {
+                InvTweaksConfig.debugLog("CLIPBOARD", "Failed to reconstruct stack (will not log again for this entry): %s", e.getMessage());
+            }
         }
         return new ItemStack(item, count);
     }
@@ -1528,22 +1533,25 @@ public class LayoutClipboard {
 
     private static int findEmptyNonTargetSlot(ScreenHandler handler, Set<Integer> allAccessible,
                                                Map<Integer, SlotData> targetLayout, int excludeSlot) {
-        // First pass: non-target, non-hotbar empty slots
+        // First pass: non-target, non-hotbar, non-armor/offhand empty slots
         for (int i : allAccessible) {
             if (i == excludeSlot) continue;
             if (targetLayout.containsKey(i)) continue;
             if (isHotbarSlot(handler, i)) continue;
+            if (isArmorOrOffhandSlot(i)) continue;
             if (handler.slots.get(i).getStack().isEmpty()) return i;
         }
-        // Second pass: non-target hotbar empty slots (fallback)
+        // Second pass: non-target hotbar empty slots (fallback, still skip armor/offhand)
         for (int i : allAccessible) {
             if (i == excludeSlot) continue;
             if (targetLayout.containsKey(i)) continue;
+            if (isArmorOrOffhandSlot(i)) continue;
             if (handler.slots.get(i).getStack().isEmpty()) return i;
         }
-        // Third pass: target slots that want to be empty
+        // Third pass: target slots that want to be empty (skip armor/offhand)
         for (int i : allAccessible) {
             if (i == excludeSlot) continue;
+            if (isArmorOrOffhandSlot(i)) continue;
             SlotData target = targetLayout.get(i);
             if (target != null && target.item() == null && handler.slots.get(i).getStack().isEmpty()) return i;
         }
@@ -1555,15 +1563,17 @@ public class LayoutClipboard {
     }
 
     private static int findAnyEmptySlot(ScreenHandler handler, Set<Integer> allAccessible, int excludeSlot) {
-        // Prefer non-hotbar slots first
+        // Prefer non-hotbar, non-armor/offhand slots first
         for (int i : allAccessible) {
             if (i == excludeSlot) continue;
             if (isHotbarSlot(handler, i)) continue;
+            if (isArmorOrOffhandSlot(i)) continue;
             if (handler.slots.get(i).getStack().isEmpty()) return i;
         }
-        // Fallback: hotbar slots
+        // Fallback: hotbar slots (still skip armor/offhand)
         for (int i : allAccessible) {
             if (i == excludeSlot) continue;
+            if (isArmorOrOffhandSlot(i)) continue;
             if (handler.slots.get(i).getStack().isEmpty()) return i;
         }
         return -1;

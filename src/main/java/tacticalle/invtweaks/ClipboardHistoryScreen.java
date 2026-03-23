@@ -611,6 +611,11 @@ public class ClipboardHistoryScreen extends Screen {
 
             if (click.button() == 0) {
                 if (isCtrlOrCmdHeld()) {
+                    // Include the previously highlighted entry in multi-selection
+                    if (highlightedIndex >= 0 && !multiSelected.contains(highlightedIndex)) {
+                        multiSelected.add(highlightedIndex);
+                    }
+                    highlightedIndex = -1;
                     // Ctrl/Cmd+click: toggle individual entry in multi-selection
                     if (multiSelected.contains(index)) {
                         multiSelected.remove(index);
