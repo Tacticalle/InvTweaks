@@ -1,7 +1,6 @@
 package tacticalle.invtweaks;
 
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.Element;
@@ -10,13 +9,11 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.ElementListWidget;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.input.KeyInput;
 
-import net.minecraft.item.tooltip.TooltipType;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
@@ -189,11 +186,18 @@ public class ClipboardHistoryScreen extends Screen {
         List<LayoutClipboard.HistoryEntry> history = LayoutClipboard.getHistory();
         int activeContainer = LayoutClipboard.getActiveContainerIndex();
         int activePlayer = LayoutClipboard.getActivePlayerIndex();
+        int activeBundle = LayoutClipboard.getActiveBundleIndex();
 
         for (int i = 0; i < history.size(); i++) {
             LayoutClipboard.HistoryEntry entry = history.get(i);
-            boolean isActive = (entry.snapshot.isPlayerInventory && i == activePlayer)
-                            || (!entry.snapshot.isPlayerInventory && i == activeContainer);
+            boolean isActive;
+            if (entry.isBundle()) {
+                isActive = (i == activeBundle);
+            } else if (entry.snapshot.isPlayerInventory) {
+                isActive = (i == activePlayer);
+            } else {
+                isActive = (i == activeContainer);
+            }
             entryList.addConfigEntry(new HistoryItemEntry(i, entry, isActive));
         }
 
@@ -268,7 +272,40 @@ public class ClipboardHistoryScreen extends Screen {
         int availableWidth = rightPanelWidth - panelPadding * 2;
         int availableHeight = panelBottom - gridY - 20 - panelPadding; // 20px reserved for summary text below
 
-        if (snapshot.isPlayerInventory) {
+        if (entry.isBundle()) {
+            // Bundle layout: dynamic grid sizing based on item count
+            int itemCount = snapshot.slots.size();
+            int cols = Math.max(2, (int) Math.ceil(Math.sqrt(itemCount)));
+            cols = Math.min(cols, 8); // clamp max columns
+            int rows = (int) Math.ceil((double) itemCount / cols);
+
+            int slotSize = Math.min(availableWidth / cols, availableHeight / Math.max(rows, 1));
+            slotSize = Math.max(slotSize, 8);
+            slotSize = Math.min(slotSize, SLOT_SIZE);
+
+            int gridWidth = cols * slotSize;
+            int gridHeight = rows * slotSize;
+            int gridX = rightPanelX + (rightPanelWidth - gridWidth) / 2;
+
+            // Draw container background
+            context.fill(gridX - 4, gridY - 4, gridX + gridWidth + 4, gridY + gridHeight + 4, PANEL_BORDER);
+            context.fill(gridX - 3, gridY - 3, gridX + gridWidth + 3, gridY + gridHeight + 3, 0xFFC6C6C6);
+
+            // Sort slot keys and render sequentially
+            List<Integer> sortedSlotIds = new java.util.ArrayList<>(snapshot.slots.keySet());
+            java.util.Collections.sort(sortedSlotIds);
+
+            for (int i = 0; i < sortedSlotIds.size(); i++) {
+                int col = i % cols;
+                int row = i / cols;
+                int sx = gridX + col * slotSize;
+                int sy = gridY + row * slotSize;
+                int slotId = sortedSlotIds.get(i);
+                renderPreviewSlotScaled(context, snapshot.slots.get(slotId), sx, sy, slotSize, previewSlots);
+            }
+
+            gridBottomY = gridY + gridHeight;
+        } else if (snapshot.isPlayerInventory) {
             // Player inventory layout:
             // Row 0-2: Main inventory (keys 9-35), 9 columns
             // Gap (4px)
@@ -379,7 +416,7 @@ public class ClipboardHistoryScreen extends Screen {
             gridBottomY = gridY + gridHeight;
         }
 
-        // Show item count summary below grid (Fix 6: "X/Y slots taken" format)
+        // Show item count summary below grid
         int nonEmptyCount = 0;
         int totalSlots = snapshot.slots.size();
         for (LayoutClipboard.SlotData sd : snapshot.slots.values()) {
@@ -387,24 +424,23 @@ public class ClipboardHistoryScreen extends Screen {
                 nonEmptyCount++;
             }
         }
-        String summary = nonEmptyCount + "/" + totalSlots + " slots taken";
+        String summary;
+        if (entry.isBundle()) {
+            summary = nonEmptyCount + " items";
+        } else {
+            summary = nonEmptyCount + "/" + totalSlots + " slots taken";
+        }
         context.drawCenteredTextWithShadow(this.textRenderer, Text.literal(summary),
                 rightPanelX + rightPanelWidth / 2, gridBottomY + 10, DARK_GRAY);
 
         // Render hover tooltip (drawn last so it's on top of everything)
+        // Uses drawItemTooltip to go through the full vanilla tooltip pipeline,
+        // which includes TooltipData rendering (e.g., bundle contents preview)
         for (PreviewSlotInfo slotInfo : previewSlots) {
             if (mouseX >= slotInfo.x && mouseX < slotInfo.x + slotInfo.size
                     && mouseY >= slotInfo.y && mouseY < slotInfo.y + slotInfo.size
                     && !slotInfo.stack.isEmpty()) {
-                MinecraftClient mc = MinecraftClient.getInstance();
-                ClientPlayerEntity player = mc.player;
-                Item.TooltipContext tooltipCtx = player != null
-                        ? Item.TooltipContext.create(MinecraftClient.getInstance().world)
-                        : Item.TooltipContext.DEFAULT;
-                TooltipType tooltipType = mc.options.advancedItemTooltips ? TooltipType.ADVANCED : TooltipType.BASIC;
-                context.drawTooltip(this.textRenderer,
-                        slotInfo.stack.getTooltip(tooltipCtx, player, tooltipType),
-                        mouseX, mouseY);
+                context.drawItemTooltip(this.textRenderer, slotInfo.stack, mouseX, mouseY);
                 break;
             }
         }
@@ -582,8 +618,13 @@ public class ClipboardHistoryScreen extends Screen {
                 context.fill(x - 2, y - 1, x + w + 2, y + ROW_HEIGHT - 3, 0x40FFFFFF);
             }
 
-            // Active indicator
-            int textColor = entry.snapshot.isPlayerInventory ? AQUA : YELLOW;
+            // Active indicator — bundle entries get orange (or dye color), player gets aqua, container gets yellow
+            int textColor;
+            if (entry.isBundle()) {
+                textColor = entry.bundleColor != -1 ? (0xFF000000 | entry.bundleColor) : ORANGE;
+            } else {
+                textColor = entry.snapshot.isPlayerInventory ? AQUA : YELLOW;
+            }
             String prefix = isActive ? "\u25B6 " : "  ";
             String label = prefix + entry.label;
 

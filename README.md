@@ -8,6 +8,7 @@ A client-side Fabric mod for Minecraft that gives you precise control over how m
 - **Only 1** — Hold a second modifier key (default: `Alt`) to pick up or transfer exactly one item
 - **Shift+Click Transfer** — Both modes work with shift-click quick-move between inventories and containers
 - **Bundle Support** — Extract from and insert into bundles with the same modifier controls
+- **Bundle Clipboard** — Copy a bundle's contents to the clipboard (Ctrl+C while hovering a bundle), then paste the layout into another bundle (Ctrl+V while hovering a bundle). Items are pulled from available inventory slots. Bundle entries appear in the clipboard history browser with dynamic grid previews.
 - **Throw Half** — Hold a modifier key (default: `Alt`) + Q to throw half a stack, both in-GUI and first-person
 - **Throw All But 1** — Hold a modifier key (default: `Ctrl`) + Q to throw all but one item
 - **Hotbar Modifiers** — Press a number key (1–9) while holding a modifier to move all-but-1 or exactly-1 to that hotbar slot
@@ -73,12 +74,6 @@ InvTweaks includes specific handling for macOS `Cmd+Shift+Click` bulk-move behav
 - **Creative Mode** — InvTweaks does not currently work in the player's inventory while in Creative mode. Creative inventory uses a different screen handler that bypasses the standard slot interaction system. Scroll transfer in Creative inventory is also disabled to avoid conflicting with Creative tab scrolling.
 - **Size-Mismatched Paste** — Pasting between a single chest (27 slots) and double chest (54 slots) is handled with a half-selector overlay or auto-paste. Other size mismatches (dispensers, hoppers, crafting tables, etc.) are still blocked.
 
-## Credits
-
-This mod is based on [All-But-1](https://modrinth.com/mod/all-but-1) by **Haage**, originally released under the [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/) public domain dedication.
-
-**InvTweaks** by **Tacticalle** is a continuation and expansion of that work, including additional features, ongoing maintenance, and new additions. This version is licensed under the [MIT License](LICENSE).
-
 ## Building from Source
 
 ```bash
@@ -91,4 +86,4 @@ The built jar will be in `build/libs/`.
 
 ## License
 
-[MIT License](LICENSE)
+> **License:** As of v1.6.0, InvTweaks is released under a custom source-available license. See [LICENSE.md](LICENSE.md) for full terms. Versions prior to 1.6.0 remain under the MIT License.

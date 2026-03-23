@@ -12,8 +12,11 @@ import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.DyedColorComponent;
+import net.minecraft.component.type.BundleContentsComponent;
 import net.minecraft.component.type.EquippableComponent;
 import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.item.BundleItem;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtOps;
@@ -66,24 +69,41 @@ public class LayoutClipboard {
         public final long timestamp;         // System.currentTimeMillis() for display purposes
         public final long playtimeMinutes;   // in-game playtime at time of copy (for auto-delete)
         public String containerTitle;        // e.g. "Chest", "Ender Chest", null for player inventory
+        public String entryType;             // "container", "player", or "bundle"
+        public int bundleColor = -1;         // RGB dye color for bundles (-1 = no custom color / use default)
 
         public HistoryEntry(LayoutSnapshot snapshot, String label, long timestamp, long playtimeMinutes) {
             this(snapshot, label, timestamp, playtimeMinutes, null);
         }
 
         public HistoryEntry(LayoutSnapshot snapshot, String label, long timestamp, long playtimeMinutes, String containerTitle) {
+            this(snapshot, label, timestamp, playtimeMinutes, containerTitle, snapshot.isPlayerInventory ? TYPE_PLAYER : TYPE_CONTAINER);
+        }
+
+        public HistoryEntry(LayoutSnapshot snapshot, String label, long timestamp, long playtimeMinutes, String containerTitle, String entryType) {
             this.snapshot = snapshot;
             this.label = label;
             this.timestamp = timestamp;
             this.playtimeMinutes = playtimeMinutes;
             this.containerTitle = containerTitle;
+            this.entryType = entryType;
+        }
+
+        public boolean isBundle() {
+            return TYPE_BUNDLE.equals(entryType);
         }
     }
+
+    // Entry type constants
+    public static final String TYPE_CONTAINER = "container";
+    public static final String TYPE_PLAYER = "player";
+    public static final String TYPE_BUNDLE = "bundle";
 
     // History ring
     private static final List<HistoryEntry> history = new ArrayList<>();
     private static int activeContainerIndex = -1;
     private static int activePlayerIndex = -1;
+    private static int activeBundleIndex = -1;
 
     // ========== HISTORY ACCESS ==========
 
@@ -111,13 +131,26 @@ public class LayoutClipboard {
         }
     }
 
+    public static int getActiveBundleIndex() {
+        return activeBundleIndex;
+    }
+
+    public static void setActiveBundleIndex(int index) {
+        if (index >= -1 && index < history.size()) {
+            activeBundleIndex = index;
+        }
+    }
+
     /**
      * Set the active index for the given history entry (auto-detects type).
      */
     public static void setActiveIndex(int index) {
         if (index < 0 || index >= history.size()) return;
         HistoryEntry entry = history.get(index);
-        if (entry.snapshot.isPlayerInventory) {
+        if (entry.isBundle()) {
+            activeBundleIndex = index;
+            InvTweaksConfig.debugLog("CLIPBOARD", "setActiveIndex: bundle=%d label=%s", index, entry.label);
+        } else if (entry.snapshot.isPlayerInventory) {
             activePlayerIndex = index;
             InvTweaksConfig.debugLog("CLIPBOARD", "setActiveIndex: player=%d label=%s", index, entry.label);
         } else {
@@ -141,6 +174,11 @@ public class LayoutClipboard {
         } else if (activePlayerIndex > index) {
             activePlayerIndex--;
         }
+        if (activeBundleIndex == index) {
+            activeBundleIndex = -1;
+        } else if (activeBundleIndex > index) {
+            activeBundleIndex--;
+        }
         ClipboardStorage.save();
     }
 
@@ -148,6 +186,7 @@ public class LayoutClipboard {
         history.clear();
         activeContainerIndex = -1;
         activePlayerIndex = -1;
+        activeBundleIndex = -1;
         ClipboardStorage.save();
     }
 
@@ -160,9 +199,12 @@ public class LayoutClipboard {
         // Shift active indices since we inserted at 0
         if (activeContainerIndex >= 0) activeContainerIndex++;
         if (activePlayerIndex >= 0) activePlayerIndex++;
+        if (activeBundleIndex >= 0) activeBundleIndex++;
 
         // Set the new entry as active for its type
-        if (entry.snapshot.isPlayerInventory) {
+        if (entry.isBundle()) {
+            activeBundleIndex = 0;
+        } else if (entry.snapshot.isPlayerInventory) {
             activePlayerIndex = 0;
         } else {
             activeContainerIndex = 0;
@@ -174,6 +216,7 @@ public class LayoutClipboard {
             int removeIdx = history.size() - 1;
             if (activeContainerIndex == removeIdx) activeContainerIndex = -1;
             if (activePlayerIndex == removeIdx) activePlayerIndex = -1;
+            if (activeBundleIndex == removeIdx) activeBundleIndex = -1;
             history.remove(removeIdx);
         }
     }
@@ -213,6 +256,8 @@ public class LayoutClipboard {
                 else if (activeContainerIndex > index) activeContainerIndex--;
                 if (activePlayerIndex == index) activePlayerIndex = -1;
                 else if (activePlayerIndex > index) activePlayerIndex--;
+                if (activeBundleIndex == index) activeBundleIndex = -1;
+                else if (activeBundleIndex > index) activeBundleIndex--;
                 // Don't increment index since we removed
             } else {
                 index++;
@@ -240,10 +285,22 @@ public class LayoutClipboard {
 
     // Used by ClipboardStorage for deserialization
     public static void loadFromStorage(List<HistoryEntry> entries, int containerIdx, int playerIdx) {
+        loadFromStorage(entries, containerIdx, playerIdx, -1);
+    }
+
+    public static void loadFromStorage(List<HistoryEntry> entries, int containerIdx, int playerIdx, int bundleIdx) {
         history.clear();
         history.addAll(entries);
         activeContainerIndex = containerIdx;
         activePlayerIndex = playerIdx;
+        // Backwards compat: validate activeBundleIndex — if index 0 is not a bundle entry, treat as "none"
+        if (bundleIdx >= 0 && bundleIdx < entries.size() && entries.get(bundleIdx).isBundle()) {
+            activeBundleIndex = bundleIdx;
+        } else if (bundleIdx == 0 && (entries.isEmpty() || !entries.get(0).isBundle())) {
+            activeBundleIndex = -1;
+        } else {
+            activeBundleIndex = bundleIdx;
+        }
     }
 
     // ========== COMPONENT SERIALIZATION ==========
@@ -341,6 +398,7 @@ public class LayoutClipboard {
      * Check if two history entries have identical contents and container type.
      */
     private static boolean entriesMatch(HistoryEntry a, HistoryEntry b) {
+        if (!Objects.equals(a.entryType, b.entryType)) return false;
         if (a.snapshot.isPlayerInventory != b.snapshot.isPlayerInventory) return false;
         if (!Objects.equals(a.containerTitle, b.containerTitle)) return false;
         if (a.snapshot.slotCount != b.snapshot.slotCount) return false;
@@ -380,6 +438,11 @@ public class LayoutClipboard {
             activePlayerIndex = -1;
         } else if (activePlayerIndex > dupIndex) {
             activePlayerIndex--;
+        }
+        if (activeBundleIndex == dupIndex) {
+            activeBundleIndex = -1;
+        } else if (activeBundleIndex > dupIndex) {
+            activeBundleIndex--;
         }
     }
 
@@ -1170,6 +1233,37 @@ public class LayoutClipboard {
         if (stack.isEmpty()) return true;
 
         Item itemType = stack.getItem();
+        String itemComponents = serializeComponents(stack);
+
+        // Smart displacement: prefer an empty target slot that actually wants this item type.
+        // This places displaced items directly at their intended destination, avoiding
+        // cascading displacements through "want empty" temp slots (critical for player
+        // inventory paste where all accessible slots are target slots).
+        int smartDest = -1;
+        for (int i : allAccessible) {
+            if (i == targetSlotId) continue;
+            if (!handler.slots.get(i).getStack().isEmpty()) continue;
+            SlotData destTarget = targetLayout.get(i);
+            if (destTarget != null && destTarget.item() == itemType) {
+                // Check component match if tracked
+                boolean compMatch = destTarget.components() == null
+                        || destTarget.components().equals(itemComponents);
+                if (compMatch) {
+                    smartDest = i;
+                    break;
+                }
+            }
+        }
+        if (smartDest >= 0) {
+            InvTweaksConfig.debugLog("PASTE", "moveOut slot=%d -> smartDest=%d (target wants this item)", targetSlotId, smartDest);
+            im.clickSlot(handler.syncId, targetSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+            im.clickSlot(handler.syncId, smartDest, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+            if (!handler.getCursorStack().isEmpty()) {
+                im.clickSlot(handler.syncId, targetSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                return false;
+            }
+            return true;
+        }
 
         int dest = findEmptyNonTargetSlot(handler, allAccessible, targetLayout, targetSlotId);
         if (dest >= 0) {
@@ -1582,7 +1676,7 @@ public class LayoutClipboard {
     // ========== PUBLIC API ==========
 
     public static boolean hasClipboard() {
-        return activeContainerIndex >= 0 || activePlayerIndex >= 0;
+        return activeContainerIndex >= 0 || activePlayerIndex >= 0 || activeBundleIndex >= 0;
     }
 
     public static void clearClipboard() {
@@ -1600,6 +1694,17 @@ public class LayoutClipboard {
     }
 
     /**
+     * Get the active bundle clipboard entry.
+     * Returns null if no active bundle clipboard exists.
+     */
+    public static HistoryEntry getActiveBundleEntry() {
+        if (activeBundleIndex < 0 || activeBundleIndex >= history.size()) return null;
+        HistoryEntry entry = history.get(activeBundleIndex);
+        if (!entry.isBundle()) return null;
+        return entry;
+    }
+
+    /**
      * Get the number of non-player (container) slots in the current handler.
      */
     public static int getContainerSlotCount(ScreenHandler handler) {
@@ -1611,6 +1716,282 @@ public class LayoutClipboard {
             }
         }
         return count;
+    }
+
+    // ========== BUNDLE CLIPBOARD ==========
+
+    public static boolean copyBundleLayout(ItemStack bundleStack, int bundleSlotIndex) {
+        return copyBundleLayout(bundleStack, bundleSlotIndex, false);
+    }
+
+    /**
+     * Copy the contents of a bundle ItemStack to the clipboard as a "bundle" type entry.
+     * @param bundleStack the bundle ItemStack to copy from
+     * @param bundleSlotIndex the slot index where the bundle is located (for debug logging)
+     * @param silent if true, skip the overlay message (useful when caller shows its own message)
+     * @return true if the copy was successful
+     */
+    public static boolean copyBundleLayout(ItemStack bundleStack, int bundleSlotIndex, boolean silent) {
+        if (bundleStack.isEmpty()) return false;
+
+        // VERIFY: DataComponentTypes.BUNDLE_CONTENTS — this is the Yarn name for 1.21.11
+        BundleContentsComponent contents = bundleStack.get(DataComponentTypes.BUNDLE_CONTENTS);
+        if (contents == null) {
+            InvTweaksConfig.debugLog("BUNDLE-COPY", "no BUNDLE_CONTENTS component on stack");
+            return false;
+        }
+
+        // Iterate bundle contents and build slot data
+        Map<Integer, SlotData> slots = new LinkedHashMap<>();
+        int slotIndex = 0;
+        for (ItemStack stack : contents.iterate()) {
+            if (stack.isEmpty()) continue;
+            slots.put(slotIndex, new SlotData(stack.getItem(), stack.getCount(), serializeComponents(stack)));
+            slotIndex++;
+        }
+
+        if (slots.isEmpty()) {
+            InvTweaksOverlay.show("Bundle is empty", 0xFFFFFF55);
+            InvTweaksConfig.debugLog("BUNDLE-COPY", "bundle is empty, skipping");
+            return false;
+        }
+
+        // Determine bundle display name for the label
+        // Format: "Bundle: [display name] (X items)" or "Bundle (X items)" for unnamed
+        String bundleName;
+        if (bundleStack.contains(DataComponentTypes.CUSTOM_NAME)) {
+            bundleName = bundleStack.getName().getString();
+        } else {
+            bundleName = null;
+        }
+        String label;
+        if (bundleName != null) {
+            label = "Bundle: " + bundleName + " (" + slots.size() + " items)";
+        } else {
+            label = "Bundle (" + slots.size() + " items)";
+        }
+
+        // Build the snapshot — use isPlayerInventory=false since bundles are their own thing
+        LayoutSnapshot snapshot = new LayoutSnapshot(slots.size(), slots, false);
+        long timestamp = System.currentTimeMillis();
+        long playtime = getCurrentPlaytimeMinutes();
+
+        String containerTitle = bundleName != null ? bundleName : "Bundle";
+        HistoryEntry entry = new HistoryEntry(snapshot, label, timestamp, playtime, containerTitle, TYPE_BUNDLE);
+
+        // Store bundle dye color if present
+        DyedColorComponent dyedColor = bundleStack.get(DataComponentTypes.DYED_COLOR);
+        if (dyedColor != null) {
+            entry.bundleColor = dyedColor.rgb();
+        }
+
+        // Deduplication
+        int dupIndex = findDuplicate(entry);
+        if (dupIndex >= 0) {
+            InvTweaksConfig.debugLog("BUNDLE-COPY", "dedup: replacing existing bundle entry at index %d | label=%s", dupIndex, history.get(dupIndex).label);
+            removeDuplicate(dupIndex);
+        }
+
+        addToHistory(entry);
+        ClipboardStorage.save();
+
+        if (!silent) {
+            InvTweaksOverlay.show("Bundle layout copied (" + slots.size() + " items)", 0xFF55FF55);
+        }
+        InvTweaksConfig.debugLog("BUNDLE-COPY", "copied bundle | slot=%d | items=%d | label=%s | dedup=%s",
+                bundleSlotIndex, slots.size(), label, dupIndex >= 0);
+
+        return true;
+    }
+
+    /**
+     * Result of a bundle paste operation.
+     */
+    public static class BundlePasteResult {
+        public final int itemsInserted;
+        public final int itemsTotal;
+        public final boolean noClipboard;
+        public final boolean bundleOnCursor;
+        public final boolean missingItems;
+        public final String message;
+
+        private BundlePasteResult(int inserted, int total, boolean noClipboard, boolean bundleOnCursor, boolean missingItems, String message) {
+            this.itemsInserted = inserted;
+            this.itemsTotal = total;
+            this.noClipboard = noClipboard;
+            this.bundleOnCursor = bundleOnCursor;
+            this.missingItems = missingItems;
+            this.message = message;
+        }
+
+        public static BundlePasteResult success(int inserted, int total) {
+            return new BundlePasteResult(inserted, total, false, false, false, null);
+        }
+        public static BundlePasteResult partial(int inserted, int total, boolean missingItems) {
+            return new BundlePasteResult(inserted, total, false, false, missingItems, null);
+        }
+        public static BundlePasteResult noClipboard() {
+            return new BundlePasteResult(0, 0, true, false, false, null);
+        }
+        public static BundlePasteResult bundleOnCursor() {
+            return new BundlePasteResult(0, 0, false, true, false, null);
+        }
+    }
+
+    /**
+     * Paste the active bundle clipboard layout into a bundle in the given slot.
+     * Items are pulled from available inventory slots and inserted via simulated clicks.
+     *
+     * @param handler the current screen handler
+     * @param bundleSlotId the handler slot ID containing the target bundle
+     * @return a BundlePasteResult describing the outcome
+     */
+    public static BundlePasteResult pasteBundleLayout(ScreenHandler handler, int bundleSlotId) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        ClientPlayerInteractionManager im = mc.interactionManager;
+        PlayerEntity player = mc.player;
+        if (im == null || player == null) return BundlePasteResult.noClipboard();
+
+        // Check for active bundle clipboard
+        HistoryEntry bundleEntry = getActiveBundleEntry();
+        if (bundleEntry == null) {
+            return BundlePasteResult.noClipboard();
+        }
+
+        Map<Integer, SlotData> clipboardSlots = bundleEntry.snapshot.slots;
+        int totalItems = 0;
+        for (SlotData sd : clipboardSlots.values()) {
+            if (sd.item() != null) totalItems++;
+        }
+
+        if (totalItems == 0) {
+            return BundlePasteResult.success(0, 0);
+        }
+
+        InvTweaksConfig.debugLog("BUNDLE-PASTE", "starting | bundleSlot=%d | clipboardItems=%d", bundleSlotId, totalItems);
+
+        // Collect all accessible source slots (player inventory + open container, but NOT other bundles)
+        Set<Integer> sourceSlots = new LinkedHashSet<>();
+        for (int i = 0; i < handler.slots.size(); i++) {
+            if (i == bundleSlotId) continue;
+            Slot slot = handler.slots.get(i);
+            ItemStack stack = slot.getStack();
+            // Don't pull from other bundles
+            if (!stack.isEmpty() && stack.getItem() instanceof BundleItem) continue;
+            sourceSlots.add(i);
+        }
+
+        int inserted = 0;
+        boolean missingItems = false;
+
+        // Process items in clipboard order
+        List<Integer> sortedKeys = new ArrayList<>(clipboardSlots.keySet());
+        Collections.sort(sortedKeys);
+
+        for (int key : sortedKeys) {
+            SlotData desired = clipboardSlots.get(key);
+            if (desired.item() == null) continue;
+
+            // Find a source slot with matching item
+            int sourceSlot = findBundlePasteSource(handler, desired, sourceSlots);
+            if (sourceSlot < 0) {
+                InvTweaksConfig.debugLog("BUNDLE-PASTE", "no source for item %s (position %d)", desired.item(), key);
+                missingItems = true;
+                continue;
+            }
+
+            // Pick up from source slot
+            ItemStack sourceStack = handler.slots.get(sourceSlot).getStack();
+            int sourceCount = sourceStack.getCount();
+            int wantCount = desired.count();
+
+            InvTweaksConfig.debugLog("BUNDLE-PASTE", "inserting: slot %d -> bundle %d | item=%s | want=%d | sourceHas=%d",
+                    sourceSlot, bundleSlotId, desired.item(), wantCount, sourceCount);
+
+            if (wantCount >= sourceCount) {
+                // Take the whole stack — left-click source to pick up, left-click bundle to insert
+                im.clickSlot(handler.syncId, sourceSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                im.clickSlot(handler.syncId, bundleSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+
+                // If cursor still has items (bundle full), put them back
+                if (!handler.getCursorStack().isEmpty()) {
+                    im.clickSlot(handler.syncId, sourceSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    InvTweaksConfig.debugLog("BUNDLE-PASTE", "bundle full, returned items to slot %d", sourceSlot);
+
+                    // Check if any items were actually inserted
+                    ItemStack afterReturn = handler.slots.get(sourceSlot).getStack();
+                    if (afterReturn.getCount() < sourceCount) {
+                        inserted++;
+                        InvTweaksConfig.debugLog("BUNDLE-PASTE", "partial insert success (position %d)", key);
+                    }
+                    break;
+                }
+                inserted++;
+            } else {
+                // Take only what we need — pick up stack, right-click to put back extras, then insert
+                im.clickSlot(handler.syncId, sourceSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                // Put back (sourceCount - wantCount) items one at a time via right-click
+                int putBack = sourceCount - wantCount;
+                for (int i = 0; i < putBack; i++) {
+                    im.clickSlot(handler.syncId, sourceSlot, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
+                }
+                // Now insert the remainder into the bundle
+                im.clickSlot(handler.syncId, bundleSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+
+                // If cursor still has items (bundle full), put them back
+                if (!handler.getCursorStack().isEmpty()) {
+                    im.clickSlot(handler.syncId, sourceSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    InvTweaksConfig.debugLog("BUNDLE-PASTE", "bundle full after partial, returned to slot %d", sourceSlot);
+                    break;
+                }
+                inserted++;
+            }
+
+            InvTweaksConfig.debugLog("BUNDLE-PASTE", "insert success (position %d) | item=%s", key, desired.item());
+        }
+
+        // Ensure cursor is clean
+        if (!handler.getCursorStack().isEmpty()) {
+            int emptySlot = findAnyEmptySlot(handler, sourceSlots);
+            if (emptySlot >= 0) {
+                im.clickSlot(handler.syncId, emptySlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+            }
+        }
+
+        InvTweaksConfig.debugLog("BUNDLE-PASTE", "complete | inserted=%d/%d | missingItems=%s", inserted, totalItems, missingItems);
+
+        if (inserted == totalItems) {
+            return BundlePasteResult.success(inserted, totalItems);
+        } else {
+            return BundlePasteResult.partial(inserted, totalItems, missingItems);
+        }
+    }
+
+    /**
+     * Find a source slot for bundle paste that matches the desired item.
+     * Uses component-aware matching with preference for exact matches.
+     */
+    private static int findBundlePasteSource(ScreenHandler handler, SlotData desired, Set<Integer> sourceSlots) {
+        int exactMatch = -1;
+        int typeMatch = -1;
+
+        for (int slotId : sourceSlots) {
+            ItemStack stack = handler.slots.get(slotId).getStack();
+            if (stack.isEmpty() || stack.getItem() != desired.item()) continue;
+
+            if (desired.components() != null && !desired.components().isEmpty()) {
+                String srcComponents = serializeComponents(stack);
+                if (desired.components().equals(srcComponents)) {
+                    if (exactMatch < 0) exactMatch = slotId;
+                } else {
+                    if (typeMatch < 0) typeMatch = slotId;
+                }
+            } else {
+                if (exactMatch < 0) exactMatch = slotId;
+            }
+        }
+
+        return exactMatch >= 0 ? exactMatch : typeMatch;
     }
 
     /**

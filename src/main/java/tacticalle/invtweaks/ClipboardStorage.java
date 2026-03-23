@@ -32,6 +32,7 @@ public class ClipboardStorage {
             root.addProperty("version", FORMAT_VERSION);
             root.addProperty("activeContainerIndex", LayoutClipboard.getActiveContainerIndex());
             root.addProperty("activePlayerIndex", LayoutClipboard.getActivePlayerIndex());
+            root.addProperty("activeBundleIndex", LayoutClipboard.getActiveBundleIndex());
 
             JsonArray historyArray = new JsonArray();
             for (LayoutClipboard.HistoryEntry entry : LayoutClipboard.getHistory()) {
@@ -43,6 +44,9 @@ public class ClipboardStorage {
                 entryObj.addProperty("slotCount", entry.snapshot.slotCount);
                 if (entry.containerTitle != null) {
                     entryObj.addProperty("containerTitle", entry.containerTitle);
+                }
+                if (entry.entryType != null) {
+                    entryObj.addProperty("entryType", entry.entryType);
                 }
 
                 JsonObject slotsObj = new JsonObject();
@@ -94,6 +98,7 @@ public class ClipboardStorage {
 
             int activeContainerIndex = root.has("activeContainerIndex") ? root.get("activeContainerIndex").getAsInt() : -1;
             int activePlayerIndex = root.has("activePlayerIndex") ? root.get("activePlayerIndex").getAsInt() : -1;
+            int activeBundleIndex = root.has("activeBundleIndex") ? root.get("activeBundleIndex").getAsInt() : 0;
 
             List<LayoutClipboard.HistoryEntry> entries = new ArrayList<>();
             JsonArray historyArray = root.getAsJsonArray("history");
@@ -132,13 +137,18 @@ public class ClipboardStorage {
                     }
 
                     String containerTitle = entryObj.has("containerTitle") ? entryObj.get("containerTitle").getAsString() : null;
+                    String entryType = entryObj.has("entryType") ? entryObj.get("entryType").getAsString() : null;
+                    // Backwards compat: derive entryType from isPlayerInventory if not present
+                    if (entryType == null) {
+                        entryType = isPlayerInventory ? LayoutClipboard.TYPE_PLAYER : LayoutClipboard.TYPE_CONTAINER;
+                    }
 
                     LayoutClipboard.LayoutSnapshot snapshot = new LayoutClipboard.LayoutSnapshot(slotCount, slots, isPlayerInventory);
-                    entries.add(new LayoutClipboard.HistoryEntry(snapshot, label, timestamp, playtimeMinutes, containerTitle));
+                    entries.add(new LayoutClipboard.HistoryEntry(snapshot, label, timestamp, playtimeMinutes, containerTitle, entryType));
                 }
             }
 
-            LayoutClipboard.loadFromStorage(entries, activeContainerIndex, activePlayerIndex);
+            LayoutClipboard.loadFromStorage(entries, activeContainerIndex, activePlayerIndex, activeBundleIndex);
             LOGGER.info("InvTweaks: Loaded {} clipboard history entries from disk", entries.size());
         } catch (Exception e) {
             LOGGER.error("InvTweaks: Failed to load clipboard history", e);

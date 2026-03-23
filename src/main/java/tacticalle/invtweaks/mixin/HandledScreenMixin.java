@@ -25,6 +25,7 @@ import net.minecraft.screen.slot.SlotActionType;
 
 import tacticalle.invtweaks.InvTweaksConfig;
 import tacticalle.invtweaks.InvTweaksOverlay;
+import tacticalle.invtweaks.LayoutClipboard;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -467,8 +468,13 @@ public abstract class HandledScreenMixin {
 
     // ========== OVERLAY RENDERING (before tooltip) ==========
 
-    @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screen/ingame/HandledScreen;renderCursorStack(Lnet/minecraft/client/gui/DrawContext;II)V"))
-    private void beforeDrawTooltip(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+    // Inject at TAIL of renderMain rather than INVOKE of renderCursorStack in render().
+    // RecipeBookScreen (parent of InventoryScreen) overrides render() and bypasses
+    // HandledScreen.render() — it calls renderMain() then renderCursorStack() directly.
+    // By injecting at the end of renderMain, the overlay fires for both code paths:
+    // container screens (via HandledScreen.render()) and player inventory (via RecipeBookScreen.render()).
+    @Inject(method = "renderMain", at = @At("TAIL"))
+    private void afterRenderMain(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         MinecraftClient mc = MinecraftClient.getInstance();
         InvTweaksOverlay.render(context, (HandledScreen<?>)(Object)this,
                 mc.getWindow().getScaledWidth(), mc.getWindow().getScaledHeight());
@@ -556,6 +562,45 @@ public abstract class HandledScreenMixin {
 
         boolean isPlayerOnly = it_isPlayerOnlyScreen();
 
+        // ========== BUNDLE CLIPBOARD HANDLING ==========
+        // Bundle operations take priority when hovering a bundle
+        boolean hoveringBundle = focusedSlot != null && !focusedSlot.getStack().isEmpty()
+                && focusedSlot.getStack().getItem() instanceof BundleItem;
+
+        if (copyTriggered && hoveringBundle) {
+            InvTweaksConfig.debugLog("BUNDLE-COPY", "copy triggered on bundle | slot=%d", focusedSlot.id);
+            LayoutClipboard.copyBundleLayout(focusedSlot.getStack(), focusedSlot.id);
+            cir.setReturnValue(true);
+            return;
+        }
+
+        if (pasteTriggered && hoveringBundle) {
+            InvTweaksConfig.debugLog("BUNDLE-PASTE", "paste triggered on bundle | slot=%d", focusedSlot.id);
+            LayoutClipboard.BundlePasteResult result = LayoutClipboard.pasteBundleLayout(handler, focusedSlot.id);
+            it_showBundlePasteResult(result);
+            cir.setReturnValue(true);
+            return;
+        }
+
+        if (cutTriggered && hoveringBundle) {
+            InvTweaksConfig.debugLog("BUNDLE-COPY", "cut triggered on bundle | slot=%d", focusedSlot.id);
+            LayoutClipboard.copyBundleLayout(focusedSlot.getStack(), focusedSlot.id, true);
+            InvTweaksOverlay.show("Bundle layout copied (cut not supported)", 0xFF55FF55);
+            cir.setReturnValue(true);
+            return;
+        }
+
+        // Check if bundle on cursor (not in a slot) when pasting
+        if (pasteTriggered) {
+            ItemStack cursorStack = handler.getCursorStack();
+            if (cursorStack != null && !cursorStack.isEmpty() && cursorStack.getItem() instanceof BundleItem) {
+                InvTweaksOverlay.show("Place bundle in a slot first", 0xFFFFFF55);
+                cir.setReturnValue(true);
+                return;
+            }
+        }
+
+        // ========== REGULAR CLIPBOARD HANDLING ==========
         if (copyTriggered) {
             // Copy layout
             InvTweaksConfig.debugLog("COPY", "copy triggered | playerOnly=%s", isPlayerOnly);
@@ -718,6 +763,38 @@ public abstract class HandledScreenMixin {
 
         InvTweaksConfig.debugLog("PASTE", "result displayed | placed=%d/%d | cursor=%s",
                 result.slotsPlaced, result.slotsTotal, result.cursorWasOccupied);
+    }
+
+    // ========== BUNDLE PASTE RESULT DISPLAY ==========
+
+    @Unique
+    private void it_showBundlePasteResult(LayoutClipboard.BundlePasteResult result) {
+        if (result.noClipboard) {
+            InvTweaksOverlay.show("No bundle layout copied", 0xFFFF5555);
+            return;
+        }
+        if (result.bundleOnCursor) {
+            InvTweaksOverlay.show("Place bundle in a slot first", 0xFFFFFF55);
+            return;
+        }
+        if (result.itemsInserted == result.itemsTotal && result.itemsTotal > 0) {
+            InvTweaksOverlay.show("Bundle layout pasted", 0xFF55FF55);
+        } else if (result.itemsInserted > 0) {
+            String msg = "Bundle partially filled (" + result.itemsInserted + "/" + result.itemsTotal + " items)";
+            if (result.missingItems) {
+                msg += " \u2014 missing items";
+            }
+            InvTweaksOverlay.show(msg, 0xFFFFAA00);
+        } else if (result.missingItems) {
+            InvTweaksOverlay.show("No matching items available for bundle", 0xFFFFFF55);
+        } else if (result.itemsTotal == 0) {
+            InvTweaksOverlay.show("Bundle clipboard is empty", 0xFFFFFF55);
+        } else {
+            InvTweaksOverlay.show("Could not fill bundle \u2014 bundle full or no items", 0xFFFF5555);
+        }
+
+        InvTweaksConfig.debugLog("BUNDLE-PASTE", "result displayed | inserted=%d/%d | missing=%s",
+                result.itemsInserted, result.itemsTotal, result.missingItems);
     }
 
     // ========== HALF-SELECTOR OVERLAY DELEGATION ==========

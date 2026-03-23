@@ -5,7 +5,7 @@
 	"name": "InvTweaks",
 	"description": "Quality of life inventory tweaks: move all-but-1 or exactly-1 items with modifier keys, bundle insert/extract controls, and more.",
 	"authors": [ "Tacticalle" ],
-	"license": "MIT",
+	"license": "ARR",
 	"icon": "assets/invtweaks/icon.png",
 	"environment": "*",
 

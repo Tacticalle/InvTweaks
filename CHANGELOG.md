@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.0] - 2026-03-22
+
+### Features
+- **Bundle Clipboard** — Copy and paste bundle contents as clipboard layouts. Hover a bundle in any open inventory and press the copy key to snapshot its contents. Press paste while hovering a bundle to fill it with items matching a saved bundle layout.
+- **Bundle Copy** — Copies all items from a bundle into the clipboard as a "bundle" type entry. Serializes full component data (enchantments, dyes, custom names, nested bundles). Empty bundles show "Bundle is empty" instead of creating an entry. Duplicate detection works the same as container/player entries.
+- **Bundle Paste** — Fills a bundle with items from available inventory slots to match a saved bundle layout. Items are inserted via simulated left-click interactions to maintain server sync. Handles partial fills (bundle weight limit reached) and missing items gracefully with descriptive overlay messages.
+- **Bundle Cut** — Copies the bundle layout without extracting items. Shows "Cut not supported on bundles, layout copied" since programmatic extraction is complex and error-prone.
+- **Bundle Clipboard History** — Bundle entries appear in the clipboard history browser with a dynamic grid that scales based on item count (using ceil(sqrt(N)) columns, clamped to 2-8). Bundle entries are colored orange to distinguish them from container (yellow) and player (aqua) entries. Summary shows "X items" instead of "X/Y slots taken".
+- **Third Active Index** — The clipboard system now maintains a separate `activeBundleIndex` alongside `activeContainerIndex` and `activePlayerIndex`. Selecting a bundle entry in the history browser sets the bundle index without affecting container/player selection.
+- **Bundle Label Format** — Bundle entries in the history browser show labels like "Bundle: Red Bundle (7 items)" for renamed bundles or "Bundle (3 items)" for unnamed ones.
+
 ## [1.5.1] - 2026-03-22
 
 ### Features
