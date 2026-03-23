@@ -50,7 +50,7 @@ public class InvTweaksOverlay {
     }
 
     /**
-     * Called from Fabric ScreenEvents.afterRender to draw all active messages.
+     * Called from HandledScreenMixin (before tooltip) to draw all active messages.
      */
     public static void render(DrawContext context, HandledScreen<?> screen, int screenWidth, int screenHeight) {
         tick();

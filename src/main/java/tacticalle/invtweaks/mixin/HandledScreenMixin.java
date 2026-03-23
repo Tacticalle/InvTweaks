@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.network.ClientPlayerInteractionManager;
@@ -23,6 +24,7 @@ import net.minecraft.screen.slot.Slot;
 import net.minecraft.screen.slot.SlotActionType;
 
 import tacticalle.invtweaks.InvTweaksConfig;
+import tacticalle.invtweaks.InvTweaksOverlay;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -463,6 +465,15 @@ public abstract class HandledScreenMixin {
         }
     }
 
+    // ========== OVERLAY RENDERING (before tooltip) ==========
+
+    @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screen/ingame/HandledScreen;renderCursorStack(Lnet/minecraft/client/gui/DrawContext;II)V"))
+    private void beforeDrawTooltip(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        InvTweaksOverlay.render(context, (HandledScreen<?>)(Object)this,
+                mc.getWindow().getScaledWidth(), mc.getWindow().getScaledHeight());
+    }
+
     // ========== COPY/PASTE LAYOUT ==========
 
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
@@ -576,7 +587,13 @@ public abstract class HandledScreenMixin {
                                 tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly,
                                         activeEntry.snapshot.slots);
                         // Custom message with "(top half)" suffix
-                        if (result.alreadyMatched) {
+                        if (result.quantityMaxOnly) {
+                            if (result.slotsPlaced > 0) {
+                                tacticalle.invtweaks.InvTweaksOverlay.show("Stacks topped up", 0xFF55FF55);
+                            } else {
+                                tacticalle.invtweaks.InvTweaksOverlay.show("Layout already matches!", 0xFF55FF55);
+                            }
+                        } else if (result.alreadyMatched) {
                             tacticalle.invtweaks.InvTweaksOverlay.show("Layout already matches!", 0xFF55FF55);
                         } else if (result.noMatchingItems) {
                             tacticalle.invtweaks.InvTweaksOverlay.show("No matching items available", 0xFFFFFF55);
@@ -638,6 +655,17 @@ public abstract class HandledScreenMixin {
         }
         if (result.typeMismatch) {
             tacticalle.invtweaks.InvTweaksOverlay.show(result.errorMessage, 0xFFFF5555);
+            return;
+        }
+
+        // Quantity maximization: all types already matched, only topped up stacks
+        if (result.quantityMaxOnly) {
+            if (result.slotsPlaced > 0) {
+                tacticalle.invtweaks.InvTweaksOverlay.show("Stacks topped up", 0xFF55FF55);
+            } else {
+                tacticalle.invtweaks.InvTweaksOverlay.show("Layout already matches!", 0xFF55FF55);
+            }
+            InvTweaksConfig.debugLog("PASTE", "quantityMaxOnly result | placed=%d/%d", result.slotsPlaced, result.slotsTotal);
             return;
         }
 
@@ -767,11 +795,46 @@ public abstract class HandledScreenMixin {
                 im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
                 // 3. Deposit cursor (N-1) into a temp slot, then QUICK_MOVE it to the other side
                 int tempSlot = it_findEmptySlotOnSameSide(slotId, scanPlayerSide);
+                boolean tempOnDestSide = false;
+                if (tempSlot < 0) {
+                    tempSlot = it_findEmptySlotOnSameSide(slotId, !scanPlayerSide);
+                    if (tempSlot >= 0) {
+                        tempOnDestSide = true;
+                        InvTweaksConfig.debugLog("SCROLL", "leave1 temp on dest side | slot=%d", tempSlot);
+                    }
+                }
                 if (tempSlot >= 0) {
-                    im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
-                    im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.QUICK_MOVE, player);
+                    if (!tempOnDestSide) {
+                        // Temp is on source side — deposit then QUICK_MOVE to destination
+                        im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.QUICK_MOVE, player);
+                    } else {
+                        // Temp is on destination side — try merging with existing partial stacks first
+                        boolean deposited = false;
+                        for (int di = 0; di < handler.slots.size(); di++) {
+                            Slot ds = handler.slots.get(di);
+                            boolean dsIsPlayer = ds.inventory instanceof net.minecraft.entity.player.PlayerInventory;
+                            if (dsIsPlayer == scanPlayerSide) continue; // skip source side
+                            if (ds.getStack().isEmpty()) continue;
+                            if (ds.getStack().getItem() != itemType) continue;
+                            if (ds.getStack().getCount() >= ds.getStack().getMaxCount()) continue;
+                            // Found a partial stack on dest side — left-click merges cursor into it
+                            im.clickSlot(handler.syncId, di, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                            InvTweaksConfig.debugLog("SCROLL", "leave1 merged into dest slot %d", di);
+                            if (handler.getCursorStack().isEmpty()) {
+                                deposited = true;
+                                break;
+                            }
+                            // Still have items on cursor — continue merging into other partial stacks
+                        }
+                        if (!deposited && !handler.getCursorStack().isEmpty()) {
+                            // Remaining items go into the empty temp slot
+                            im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                            InvTweaksConfig.debugLog("SCROLL", "leave1 remainder into empty dest slot %d", tempSlot);
+                        }
+                    }
                 } else {
-                    // No temp slot — put items back in source slot
+                    // No temp slot on either side — put items back in source slot
                     InvTweaksConfig.debugLog("SCROLL", "leave1 no temp slot | slot=%d | putting back", slotId);
                     im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                 }

@@ -101,7 +101,6 @@ public class InvTweaksClient implements ClientModInitializer {
         ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
             if (screen instanceof HandledScreen<?> handledScreen) {
                 ScreenEvents.afterRender(screen).register((s, context, mouseX, mouseY, tickDelta) -> {
-                    InvTweaksOverlay.render(context, handledScreen, scaledWidth, scaledHeight);
                     if (HalfSelectorOverlay.isActive()) {
                         HalfSelectorOverlay.render(context, handledScreen, scaledWidth, scaledHeight);
                     }

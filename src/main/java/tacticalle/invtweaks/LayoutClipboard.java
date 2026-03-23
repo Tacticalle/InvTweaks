@@ -395,11 +395,13 @@ public class LayoutClipboard {
         public final boolean sizeMismatch;
         public final boolean noClipboard;
         public final boolean typeMismatch;
+        public final boolean quantityMaxOnly;
         public final String errorMessage;
 
         private PasteResult(int slotsPlaced, int slotsTotal, boolean cursorWasOccupied,
                             boolean alreadyMatched, boolean noMatchingItems, boolean sizeMismatch,
-                            boolean noClipboard, boolean typeMismatch, String errorMessage) {
+                            boolean noClipboard, boolean typeMismatch, boolean quantityMaxOnly,
+                            String errorMessage) {
             this.slotsPlaced = slotsPlaced;
             this.slotsTotal = slotsTotal;
             this.cursorWasOccupied = cursorWasOccupied;
@@ -408,27 +410,31 @@ public class LayoutClipboard {
             this.sizeMismatch = sizeMismatch;
             this.noClipboard = noClipboard;
             this.typeMismatch = typeMismatch;
+            this.quantityMaxOnly = quantityMaxOnly;
             this.errorMessage = errorMessage;
         }
 
         public static PasteResult success(int placed, int total, boolean cursorOccupied) {
-            return new PasteResult(placed, total, cursorOccupied, false, false, false, false, false, null);
+            return new PasteResult(placed, total, cursorOccupied, false, false, false, false, false, false, null);
+        }
+        public static PasteResult successQuantityMax(int placed, int total, boolean cursorOccupied) {
+            return new PasteResult(placed, total, cursorOccupied, false, false, false, false, false, true, null);
         }
         public static PasteResult alreadyMatched() {
-            return new PasteResult(0, 0, false, true, false, false, false, false, null);
+            return new PasteResult(0, 0, false, true, false, false, false, false, false, null);
         }
         public static PasteResult noClipboard() {
-            return new PasteResult(0, 0, false, false, false, false, true, false, null);
+            return new PasteResult(0, 0, false, false, false, false, true, false, false, null);
         }
         public static PasteResult noMatchingItems() {
-            return new PasteResult(0, 0, false, false, true, false, false, false, null);
+            return new PasteResult(0, 0, false, false, true, false, false, false, false, null);
         }
         public static PasteResult sizeMismatch(int clipSize, int containerSize) {
-            return new PasteResult(0, 0, false, false, false, true, false, false,
+            return new PasteResult(0, 0, false, false, false, true, false, false, false,
                     "Layout size incompatible");
         }
         public static PasteResult typeMismatch(String msg) {
-            return new PasteResult(0, 0, false, false, false, false, false, true, msg);
+            return new PasteResult(0, 0, false, false, false, false, false, true, false, msg);
         }
     }
 
@@ -591,6 +597,7 @@ public class LayoutClipboard {
 
         // Quick check: is the layout already matching?
         boolean alreadyMatches = true;
+        boolean quantityMaxOnly = false;
         for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
             int slotId = entry.getKey();
             SlotData desired = entry.getValue();
@@ -640,6 +647,8 @@ public class LayoutClipboard {
             if (!canTopUp) {
                 return PasteResult.alreadyMatched();
             }
+            quantityMaxOnly = true;
+            InvTweaksConfig.debugLog("PASTE", "quantity maximization only — all types match, topping up stacks");
         }
 
         // Two-pass partial paste logic
@@ -721,8 +730,11 @@ public class LayoutClipboard {
             InvTweaksConfig.debugLog("PASTE", "restored cursor item from slot %d", cursorStashSlot);
         }
 
-        InvTweaksConfig.debugLog("PASTE", "complete | matched=%d/%d | cursorOccupied=%s",
-                matchedSlots, targetLayout.size(), cursorOccupied);
+        InvTweaksConfig.debugLog("PASTE", "complete | matched=%d/%d | cursorOccupied=%s | quantityMaxOnly=%s",
+                matchedSlots, targetLayout.size(), cursorOccupied, quantityMaxOnly);
+        if (quantityMaxOnly) {
+            return PasteResult.successQuantityMax(matchedSlots, targetLayout.size(), cursorOccupied);
+        }
         return PasteResult.success(matchedSlots, targetLayout.size(), cursorOccupied);
     }
 
