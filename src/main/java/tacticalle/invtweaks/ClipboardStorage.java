@@ -41,6 +41,9 @@ public class ClipboardStorage {
                 entryObj.addProperty("playtimeMinutes", entry.playtimeMinutes);
                 entryObj.addProperty("isPlayerInventory", entry.snapshot.isPlayerInventory);
                 entryObj.addProperty("slotCount", entry.snapshot.slotCount);
+                if (entry.containerTitle != null) {
+                    entryObj.addProperty("containerTitle", entry.containerTitle);
+                }
 
                 JsonObject slotsObj = new JsonObject();
                 for (Map.Entry<Integer, LayoutClipboard.SlotData> slotEntry : entry.snapshot.slots.entrySet()) {
@@ -128,8 +131,10 @@ public class ClipboardStorage {
                         }
                     }
 
+                    String containerTitle = entryObj.has("containerTitle") ? entryObj.get("containerTitle").getAsString() : null;
+
                     LayoutClipboard.LayoutSnapshot snapshot = new LayoutClipboard.LayoutSnapshot(slotCount, slots, isPlayerInventory);
-                    entries.add(new LayoutClipboard.HistoryEntry(snapshot, label, timestamp, playtimeMinutes));
+                    entries.add(new LayoutClipboard.HistoryEntry(snapshot, label, timestamp, playtimeMinutes, containerTitle));
                 }
             }
 

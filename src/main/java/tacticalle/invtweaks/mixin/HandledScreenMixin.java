@@ -501,10 +501,16 @@ public abstract class HandledScreenMixin {
         int keyCode = input.key();
         long windowHandle = MinecraftClient.getInstance().getWindow().getHandle();
 
-        // Clipboard history: Shift+Tab
-        boolean shiftHeld = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS ||
-                            GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
-        if (shiftHeld && keyCode == GLFW.GLFW_KEY_TAB) {
+        // Clipboard history: configurable key or legacy Shift+Tab
+        boolean historyTriggered;
+        if (config.clipboardHistoryKey == -1) {
+            boolean shiftHeld = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS ||
+                                GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
+            historyTriggered = shiftHeld && keyCode == GLFW.GLFW_KEY_TAB;
+        } else {
+            historyTriggered = keyCode == config.clipboardHistoryKey;
+        }
+        if (historyTriggered) {
             boolean isPlayerOnly = it_isPlayerOnlyScreen();
             MinecraftClient.getInstance().setScreen(new tacticalle.invtweaks.ClipboardHistoryScreen(
                     (HandledScreen<?>)(Object)this, handler, isPlayerOnly));
@@ -512,27 +518,54 @@ public abstract class HandledScreenMixin {
             return;
         }
 
-        boolean ctrlPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS ||
-                              GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS;
-        // On macOS, also check Command (Super) key as Ctrl equivalent
-        boolean superPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_SUPER) == GLFW.GLFW_PRESS ||
-                               GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_SUPER) == GLFW.GLFW_PRESS;
-        boolean modHeld = ctrlPressed || superPressed;
+        // Copy/Paste/Cut: configurable keys or legacy Ctrl+key / Cmd+key
+        boolean copyTriggered;
+        if (config.copyLayoutKey == -1) {
+            boolean ctrlPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS ||
+                                  GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS;
+            boolean superPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_SUPER) == GLFW.GLFW_PRESS ||
+                                   GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_SUPER) == GLFW.GLFW_PRESS;
+            copyTriggered = (ctrlPressed || superPressed) && keyCode == GLFW.GLFW_KEY_C;
+        } else {
+            copyTriggered = keyCode == config.copyLayoutKey;
+        }
 
-        if (!modHeld) return;
+        boolean pasteTriggered;
+        if (config.pasteLayoutKey == -1) {
+            boolean ctrlPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS ||
+                                  GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS;
+            boolean superPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_SUPER) == GLFW.GLFW_PRESS ||
+                                   GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_SUPER) == GLFW.GLFW_PRESS;
+            pasteTriggered = (ctrlPressed || superPressed) && keyCode == GLFW.GLFW_KEY_V;
+        } else {
+            pasteTriggered = keyCode == config.pasteLayoutKey;
+        }
+
+        boolean cutTriggered;
+        if (config.cutLayoutKey == -1) {
+            boolean ctrlPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS ||
+                                  GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS;
+            boolean superPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_SUPER) == GLFW.GLFW_PRESS ||
+                                   GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_SUPER) == GLFW.GLFW_PRESS;
+            cutTriggered = (ctrlPressed || superPressed) && keyCode == GLFW.GLFW_KEY_X;
+        } else {
+            cutTriggered = keyCode == config.cutLayoutKey;
+        }
+
+        if (!copyTriggered && !pasteTriggered && !cutTriggered) return;
 
         boolean isPlayerOnly = it_isPlayerOnlyScreen();
 
-        if (keyCode == GLFW.GLFW_KEY_C) {
+        if (copyTriggered) {
             // Copy layout
-            InvTweaksConfig.debugLog("COPY", "Ctrl+C detected | playerOnly=%s", isPlayerOnly);
+            InvTweaksConfig.debugLog("COPY", "copy triggered | playerOnly=%s", isPlayerOnly);
             tacticalle.invtweaks.LayoutClipboard.copyLayout(handler, isPlayerOnly);
             cir.setReturnValue(true);
-        } else if (keyCode == GLFW.GLFW_KEY_V) {
+        } else if (pasteTriggered) {
             // Paste layout — with size-mismatch pre-check and HalfSelectorOverlay support
-            InvTweaksConfig.debugLog("PASTE", "Ctrl+V detected | playerOnly=%s", isPlayerOnly);
+            InvTweaksConfig.debugLog("PASTE", "paste triggered | playerOnly=%s", isPlayerOnly);
 
-            // If HalfSelectorOverlay is active, ignore Ctrl+V (don't re-trigger)
+            // If HalfSelectorOverlay is active, ignore paste (don't re-trigger)
             if (tacticalle.invtweaks.HalfSelectorOverlay.isActive()) {
                 cir.setReturnValue(true);
                 return;
@@ -625,9 +658,9 @@ public abstract class HandledScreenMixin {
                     tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly);
             it_showPasteResult(result);
             cir.setReturnValue(true);
-        } else if (keyCode == GLFW.GLFW_KEY_X) {
+        } else if (cutTriggered) {
             // Cut layout
-            InvTweaksConfig.debugLog("CUT", "Ctrl+X detected | playerOnly=%s", isPlayerOnly);
+            InvTweaksConfig.debugLog("CUT", "cut triggered | playerOnly=%s", isPlayerOnly);
             tacticalle.invtweaks.LayoutClipboard.cutLayout(handler, isPlayerOnly);
             cir.setReturnValue(true);
         }

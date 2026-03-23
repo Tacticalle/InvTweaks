@@ -403,10 +403,18 @@ public class ClipboardHistoryScreen extends Screen {
             return true;
         }
 
-        // Shift+Tab closes
-        if (input.hasShift() && keyCode == GLFW.GLFW_KEY_TAB) {
-            close();
-            return true;
+        // Shift+Tab or custom clipboard history key closes
+        InvTweaksConfig config = InvTweaksConfig.get();
+        if (config.clipboardHistoryKey == -1) {
+            if (input.hasShift() && keyCode == GLFW.GLFW_KEY_TAB) {
+                close();
+                return true;
+            }
+        } else {
+            if (keyCode == config.clipboardHistoryKey) {
+                close();
+                return true;
+            }
         }
 
         return super.keyPressed(input);

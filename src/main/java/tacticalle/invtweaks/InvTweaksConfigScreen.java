@@ -257,10 +257,30 @@ public class InvTweaksConfigScreen extends Screen {
 
         // ---- Copy/Paste Layout ----
         entryList.addConfigEntry(new SectionHeaderEntry("\u00a7l--- Copy/Paste Layout ---"));
-        entryList.addConfigEntry(new InfoTextEntry("  Copy: Ctrl+C in container GUI", GREEN));
-        entryList.addConfigEntry(new InfoTextEntry("  Paste: Ctrl+V in container GUI", GREEN));
-        entryList.addConfigEntry(new InfoTextEntry("  (Cmd+C/V also works on macOS)", DARK_GRAY));
-        entryList.addConfigEntry(new InfoTextEntry("  History: Shift+Tab in container GUI", GREEN));
+
+        ButtonWidget copyLayoutKeyBtn = ButtonWidget.builder(
+                Text.literal(InvTweaksConfig.getKeyName(config.copyLayoutKey)),
+                button -> startCapture("copyLayoutKey", button)
+        ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new KeyBindEntry("Copy Layout:", "(default: Ctrl+C)", GREEN, copyLayoutKeyBtn));
+
+        ButtonWidget pasteLayoutKeyBtn = ButtonWidget.builder(
+                Text.literal(InvTweaksConfig.getKeyName(config.pasteLayoutKey)),
+                button -> startCapture("pasteLayoutKey", button)
+        ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new KeyBindEntry("Paste Layout:", "(default: Ctrl+V)", GREEN, pasteLayoutKeyBtn));
+
+        ButtonWidget cutLayoutKeyBtn = ButtonWidget.builder(
+                Text.literal(InvTweaksConfig.getKeyName(config.cutLayoutKey)),
+                button -> startCapture("cutLayoutKey", button)
+        ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new KeyBindEntry("Cut Layout:", "(default: Ctrl+X)", GREEN, cutLayoutKeyBtn));
+
+        ButtonWidget clipboardHistoryKeyBtn = ButtonWidget.builder(
+                Text.literal(InvTweaksConfig.getKeyName(config.clipboardHistoryKey)),
+                button -> startCapture("clipboardHistoryKey", button)
+        ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new KeyBindEntry("Clipboard History:", "(default: Shift+Tab)", GREEN, clipboardHistoryKeyBtn));
     }
 
     // ---- Per-tweak key overrides ----
@@ -341,6 +361,11 @@ public class InvTweaksConfigScreen extends Screen {
         entryList.addConfigEntry(new FeatureEntry("Copy/Paste Layout", toggleW,
                 () -> config.enableCopyPaste, v -> config.enableCopyPaste = v));
 
+        // Display settings
+        entryList.addConfigEntry(new SectionHeaderEntry("\u00a7l--- Display ---"));
+        entryList.addConfigEntry(new FeatureEntry("Show Overlay Messages", toggleW,
+                () -> config.showOverlayMessages, v -> config.showOverlayMessages = v));
+
         // Clipboard history settings
         entryList.addConfigEntry(new SectionHeaderEntry("\u00a7l--- Clipboard History ---"));
         entryList.addConfigEntry(new IntValueEntry("Max Clipboard History", 5, 200,
@@ -402,6 +427,26 @@ public class InvTweaksConfigScreen extends Screen {
             if (capturingButton != null) {
                 capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
             }
+        } else if (capturingKey.equals("copyLayoutKey")) {
+            config.copyLayoutKey = keyCode;
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
+        } else if (capturingKey.equals("pasteLayoutKey")) {
+            config.pasteLayoutKey = keyCode;
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
+        } else if (capturingKey.equals("cutLayoutKey")) {
+            config.cutLayoutKey = keyCode;
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
+        } else if (capturingKey.equals("clipboardHistoryKey")) {
+            config.clipboardHistoryKey = keyCode;
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
         } else if (capturingKey.startsWith("tweak_ab1_")) {
             String tweakName = capturingKey.substring("tweak_ab1_".length());
             config.setPerTweakAllBut1Key(tweakName, keyCode);
@@ -447,6 +492,22 @@ public class InvTweaksConfigScreen extends Screen {
         } else if (capturingKey.equals("throwHalfKey")) {
             if (capturingButton != null) {
                 capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.throwHalfKey)));
+            }
+        } else if (capturingKey.equals("copyLayoutKey")) {
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.copyLayoutKey)));
+            }
+        } else if (capturingKey.equals("pasteLayoutKey")) {
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.pasteLayoutKey)));
+            }
+        } else if (capturingKey.equals("cutLayoutKey")) {
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.cutLayoutKey)));
+            }
+        } else if (capturingKey.equals("clipboardHistoryKey")) {
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.clipboardHistoryKey)));
             }
         } else if (capturingKey.startsWith("tweak_ab1_") || capturingKey.startsWith("tweak_o1_")) {
             // Restore from config

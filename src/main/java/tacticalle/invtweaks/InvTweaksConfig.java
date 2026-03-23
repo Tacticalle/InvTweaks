@@ -57,9 +57,18 @@ public class InvTweaksConfig {
     public int hotbarModifiersAllBut1Key = -1;
     public int hotbarModifiersOnly1Key = -1;
 
+    // Overlay display
+    public boolean showOverlayMessages = true;
+
     // Clipboard history
     public int clipboardMaxHistory = 50;              // max entries to keep (range 5-200)
     public int clipboardExpiryPlaytimeHours = 0;      // 0 = never expire, otherwise hours of in-game playtime
+
+    // Clipboard keybinds (-1 = legacy defaults)
+    public int clipboardHistoryKey = -1;
+    public int copyLayoutKey = -1;
+    public int pasteLayoutKey = -1;
+    public int cutLayoutKey = -1;
 
     // Debug logging
     public boolean enableDebugLogging = false;
@@ -224,8 +233,25 @@ public class InvTweaksConfig {
     }
 
     /**
-     * Check if the throw-all-but-1 key is pressed.
+     * Check if the copy layout custom key is pressed.
      */
+    public boolean isCopyLayoutKeyPressed() {
+        return copyLayoutKey != -1 && isKeyPressed(copyLayoutKey);
+    }
+
+    /**
+     * Check if the paste layout custom key is pressed.
+     */
+    public boolean isPasteLayoutKeyPressed() {
+        return pasteLayoutKey != -1 && isKeyPressed(pasteLayoutKey);
+    }
+
+    /**
+     * Check if the cut layout custom key is pressed.
+     */
+    public boolean isCutLayoutKeyPressed() {
+        return cutLayoutKey != -1 && isKeyPressed(cutLayoutKey);
+    }
 
     /**
      * Get the paired left/right variant of a modifier key.

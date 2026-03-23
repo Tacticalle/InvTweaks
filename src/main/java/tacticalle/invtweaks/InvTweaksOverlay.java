@@ -44,6 +44,7 @@ public class InvTweaksOverlay {
      * Queue a message with custom duration.
      */
     public static void show(String message, int color, long displayMs) {
+        if (!InvTweaksConfig.get().showOverlayMessages) return;
         long now = System.currentTimeMillis();
         long fadeStart = now + displayMs;
         activeMessages.add(new OverlayMessage(message, color, now, fadeStart, DEFAULT_FADE_MS));

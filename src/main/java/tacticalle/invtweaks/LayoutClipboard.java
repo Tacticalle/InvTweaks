@@ -62,12 +62,18 @@ public class LayoutClipboard {
         public final String label;           // e.g. "Chest (27 slots)" or "Player Inventory (36 slots)"
         public final long timestamp;         // System.currentTimeMillis() for display purposes
         public final long playtimeMinutes;   // in-game playtime at time of copy (for auto-delete)
+        public String containerTitle;        // e.g. "Chest", "Ender Chest", null for player inventory
 
         public HistoryEntry(LayoutSnapshot snapshot, String label, long timestamp, long playtimeMinutes) {
+            this(snapshot, label, timestamp, playtimeMinutes, null);
+        }
+
+        public HistoryEntry(LayoutSnapshot snapshot, String label, long timestamp, long playtimeMinutes, String containerTitle) {
             this.snapshot = snapshot;
             this.label = label;
             this.timestamp = timestamp;
             this.playtimeMinutes = playtimeMinutes;
+            this.containerTitle = containerTitle;
         }
     }
 
@@ -291,6 +297,87 @@ public class LayoutClipboard {
         return new ItemStack(item, count);
     }
 
+    // ========== DEDUPLICATION ==========
+
+    /**
+     * Get the container title from the currently open screen.
+     * Returns null for player inventory screens.
+     */
+    private static String getContainerTitle(boolean isPlayerOnly) {
+        if (isPlayerOnly) return null;
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.currentScreen instanceof HandledScreen<?> hs) {
+            Text title = hs.getTitle();
+            if (title != null) {
+                String titleStr = title.getString();
+                if (titleStr != null && !titleStr.isEmpty()) {
+                    return titleStr;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Find a duplicate entry in the history ring that has identical contents and container type.
+     * Returns the index of the duplicate, or -1 if none found.
+     */
+    private static int findDuplicate(HistoryEntry newEntry) {
+        for (int i = 0; i < history.size(); i++) {
+            HistoryEntry existing = history.get(i);
+            if (entriesMatch(newEntry, existing)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Check if two history entries have identical contents and container type.
+     */
+    private static boolean entriesMatch(HistoryEntry a, HistoryEntry b) {
+        if (a.snapshot.isPlayerInventory != b.snapshot.isPlayerInventory) return false;
+        if (!Objects.equals(a.containerTitle, b.containerTitle)) return false;
+        if (a.snapshot.slotCount != b.snapshot.slotCount) return false;
+        if (a.snapshot.slots.size() != b.snapshot.slots.size()) return false;
+
+        for (Map.Entry<Integer, SlotData> entry : a.snapshot.slots.entrySet()) {
+            int key = entry.getKey();
+            SlotData sdA = entry.getValue();
+            SlotData sdB = b.snapshot.slots.get(key);
+            if (sdB == null) return false;
+            if (!slotDataEquals(sdA, sdB)) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Compare two SlotData for equality.
+     */
+    private static boolean slotDataEquals(SlotData a, SlotData b) {
+        if (a.item() != b.item()) return false;
+        if (a.count() != b.count()) return false;
+        return Objects.equals(a.components(), b.components());
+    }
+
+    /**
+     * Remove a duplicate entry and adjust active indices accordingly.
+     * Does NOT add the new entry — caller handles insertion.
+     */
+    private static void removeDuplicate(int dupIndex) {
+        history.remove(dupIndex);
+        if (activeContainerIndex == dupIndex) {
+            activeContainerIndex = -1;
+        } else if (activeContainerIndex > dupIndex) {
+            activeContainerIndex--;
+        }
+        if (activePlayerIndex == dupIndex) {
+            activePlayerIndex = -1;
+        } else if (activePlayerIndex > dupIndex) {
+            activePlayerIndex--;
+        }
+    }
+
     // ========== COPY ==========
 
     /**
@@ -370,15 +457,24 @@ public class LayoutClipboard {
         String label = getScreenLabel(slots.size(), isPlayerOnly);
         long timestamp = System.currentTimeMillis();
         long playtime = getCurrentPlaytimeMinutes();
+        String containerTitle = getContainerTitle(isPlayerOnly);
 
-        HistoryEntry entry = new HistoryEntry(snapshot, label, timestamp, playtime);
+        HistoryEntry entry = new HistoryEntry(snapshot, label, timestamp, playtime, containerTitle);
+
+        int dupIndex = findDuplicate(entry);
+        if (dupIndex >= 0) {
+            InvTweaksConfig.debugLog("COPY", "dedup: replacing existing entry at index %d | label=%s", dupIndex, history.get(dupIndex).label);
+            removeDuplicate(dupIndex);
+        }
+
         addToHistory(entry);
         ClipboardStorage.save();
 
         if (!silent) {
             InvTweaksOverlay.show("Layout copied", 0xFF55FF55);
         }
-        InvTweaksConfig.debugLog("COPY", "copied %d slots | playerOnly=%s | label=%s", slots.size(), isPlayerOnly, label);
+        InvTweaksConfig.debugLog("COPY", "copied %d slots | playerOnly=%s | label=%s | containerTitle=%s | dedup=%s",
+                slots.size(), isPlayerOnly, label, containerTitle, dupIndex >= 0);
     }
 
     // ========== PASTE ==========
@@ -965,12 +1061,20 @@ public class LayoutClipboard {
         }
 
         LayoutSnapshot snapshot = new LayoutSnapshot(cachedSlots.size(), cachedSlots, true);
-        addToHistory(new HistoryEntry(snapshot, "Death snapshot",
-                System.currentTimeMillis(), getCurrentPlaytimeMinutes()));
+        HistoryEntry entry = new HistoryEntry(snapshot, "Death snapshot",
+                System.currentTimeMillis(), getCurrentPlaytimeMinutes(), null);
+
+        int dupIndex = findDuplicate(entry);
+        if (dupIndex >= 0) {
+            InvTweaksConfig.debugLog("DEATH", "dedup: replacing existing death snapshot at index %d", dupIndex);
+            removeDuplicate(dupIndex);
+        }
+
+        addToHistory(entry);
         ClipboardStorage.save();
 
-        InvTweaksOverlay.show("Inventory saved (death)", 0xFFFFAA00); // orange
-        InvTweaksConfig.debugLog("DEATH", "Saved cached inventory as death snapshot");
+        InvTweaksOverlay.show("Inventory saved (death)", 0xFFFFAA00);
+        InvTweaksConfig.debugLog("DEATH", "Saved cached inventory as death snapshot | dedup=%s", dupIndex >= 0);
     }
 
     // ========== CURSOR-SAFE PASTE HELPERS (QUICK_MOVE only) ==========
