@@ -1,6 +1,6 @@
 # InvTweaks
 
-A Fabric mod for Minecraft that gives you precise control over how many items you pick up, transfer, throw, and manage. Hold modifier keys while clicking to leave one behind, take exactly one, throw half a stack, fill existing stacks, transfer items by scrolling, and copy/paste container layouts.
+A client-side Fabric mod for Minecraft that gives you precise control over how many items you pick up, transfer, throw, and manage. Hold modifier keys while clicking to leave one behind, take exactly one, throw half a stack, fill existing stacks, transfer items by scrolling, and copy/paste container layouts.
 
 ## Features
 
@@ -14,12 +14,12 @@ A Fabric mod for Minecraft that gives you precise control over how many items yo
 - **Fill Existing Stacks** — Hold a modifier key (default: `Alt`) + Shift+Click to distribute items only into existing partial stacks
 - **Scroll Transfer** — Scroll up to move matching items to the container, scroll down to move them to your inventory
 - **Scroll Leave-1** — Hold a modifier key (default: `Ctrl`) while scrolling to leave one behind in each slot
-- **Copy/Paste Layout** — Ctrl+C to snapshot a container or inventory layout (including armor and offhand), Ctrl+V to rearrange items to match, Ctrl+X to cut. Paste fills each slot to max stack size using available items. Component data (enchantments, potion types, etc.) is tracked for accurate matching. Paste works even with items on your cursor (uses shift-click only to keep cursor items safe). Partial paste places as many items as possible when room is limited.
+- **Copy/Paste Layout** — Ctrl+C to snapshot a container or inventory layout (including armor and offhand), Ctrl+V to rearrange items to match, Ctrl+X to cut. All three keybinds are configurable in the Hotkeys tab. Paste fills each slot to max stack size using available items. Component data (enchantments, potion types, etc.) is tracked for accurate matching. Paste works even with items on your cursor (uses shift-click only to keep cursor items safe). Partial paste places as many items as possible when room is limited.
 - **Half-Selector for Size Mismatches** — Pasting a double chest layout into a single chest shows an interactive overlay to choose the Top Half or Bottom Half. Pasting a single chest layout into a double chest automatically fills the top rows.
-- **Clipboard History** — Maintains a history of past clipboard snapshots. Press Shift+Tab while an inventory is open to browse, select, or delete saved layouts with item preview grids and hover tooltips.
+- **Clipboard History** — Maintains a history of past clipboard snapshots. Press Shift+Tab (configurable) while an inventory is open to browse, select, or delete saved layouts with item preview grids and vanilla-style hover tooltips. Supports multi-select deletion (Shift+click for range, Ctrl/Cmd+click to toggle). Duplicate copies automatically replace older identical entries.
 - **Death Auto-Snapshot** — Player inventory (including armor and offhand) is automatically saved to clipboard history on death so you can paste your layout back after respawning
 - **Persistent Clipboard** — Clipboard history is saved to disk and survives game restarts
-- **Message Overlay** — Feedback messages render next to the GUI instead of in chat
+- **Message Overlay** — Feedback messages render next to the GUI instead of in chat. Can be toggled off via the `showOverlayMessages` config option.
 - **Configurable Keys** — Rebind all modifier keys to whatever you prefer
 - **Per-Feature Toggles** — Enable or disable each feature individually
 - **Per-Tweak Key Overrides** — Set custom modifier keys for individual tweaks
@@ -50,8 +50,8 @@ The config screen has four tabs: All (everything), Tweaks (feature toggles), Hot
 | `Alt` + Shift+Click | Fill existing stacks only |
 | Scroll Up/Down | Transfer all matching items |
 | `Ctrl` + Scroll | Transfer matching items, leave 1 |
-| `Ctrl`+C / `Ctrl`+V / `Ctrl`+X | Copy / Paste / Cut layout |
-| `Shift`+`Tab` | Open clipboard history browser |
+| `Ctrl`+C / `Ctrl`+V / `Ctrl`+X | Copy / Paste / Cut layout (configurable) |
+| `Shift`+`Tab` | Open clipboard history browser (configurable) |
 | `K` | Open config screen |
 
 Both left and right variants of modifier keys are recognized.
