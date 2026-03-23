@@ -9,6 +9,9 @@
 - **Ungated Scroll Debug Log** — `[IT:SCROLL-RAW]` log line now respects the `enableDebugLogging` setting instead of firing on every scroll event
 - **Verbose Serialize Logging** — Removed per-item debug log lines from `serializeComponents()` that produced excessive output when debug logging was enabled
 - **Duplicate Config Screen Branches** — Removed duplicate `else if` branches in key capture `applyCapture()` and `cancelCapture()` methods
+- **Overlay Renders Behind Tooltips** — Overlay messages ("Layout pasted", etc.) now render behind item tooltips instead of on top. Moved overlay rendering from `afterRender` callback to a `@Inject` on `HandledScreen.render()` before cursor stack rendering.
+- **Scroll Leave-1 Works With Full Containers** — Scroll leave-1 mode now searches the destination side for temp slots when the source side is full, instead of failing silently. Both sides full still fails gracefully.
+- **Quantity Maximization Message** — Paste now shows "Stacks topped up" when proceeding for quantity-only topping, instead of the misleading "Layout almost full" message
 
 ## [1.4.0] - 2026-03-20
 
