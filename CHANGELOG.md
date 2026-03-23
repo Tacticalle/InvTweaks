@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.5.1] - 2026-03-22
+
+### Features
+- **Clipboard Deduplication** — Detects identical layout copies (same contents + same container title) and replaces the older entry instead of creating a duplicate
+- **Configurable Clipboard History Keybind** — Clipboard history key is now configurable (`clipboardHistoryKey`, default: legacy Shift+Tab)
+- **Overlay Message Suppression Toggle** — New `showOverlayMessages` config field (default: true) to suppress overlay messages ("Layout copied", etc.)
+- **Custom Copy/Paste/Cut Keybinds** — `copyLayoutKey`, `pasteLayoutKey`, `cutLayoutKey` config fields (default: legacy Ctrl+C/V/X). Replaces hardcoded key detection.
+- **New "Copy/Paste Layout" Section in Hotkeys Tab** — 4 KeyBindEntry rows for clipboard history, copy, paste, and cut keybinds. Removed old Ctrl+C/V/X info text rows.
+- **Multi-Select Deletion in Clipboard History** — Ctrl/Cmd+click toggle, Shift+click range select, bulk delete with confirmation
+- **Vanilla-Style Hover Tooltips in Clipboard History** — Item tooltips in the preview grid now use vanilla tooltip rendering with full component data, respecting the F3+H advanced tooltip toggle
+
+### Bug Fixes
+- **Fixed `reconstructStack` Log Spam** — Cached failed component strings so each unique failure logs WARN once instead of every frame (previously 600+ lines/sec). Returns fallback ItemStack (item + count, no components) for preview.
+- **Fixed Multi-Select Count Mismatch** — Ctrl+clicking now promotes the highlighted entry into the multi-select set and clears the single highlight, preventing off-by-one selection counts
+- **Fixed Death Snapshot Paste Regression** — Armor slots 5–8 and offhand slot 45 are now excluded from displacement target selection in `findEmptyNonTargetSlot` and `findAnyEmptySlot`. Previously, empty armor slots after death were picked as displacement targets, rejecting non-equippable items.
+
 ## [1.4.1] - 2026-03-22
 
 ### Bug Fixes
