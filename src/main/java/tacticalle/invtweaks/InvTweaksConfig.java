@@ -70,6 +70,9 @@ public class InvTweaksConfig {
     public int pasteLayoutKey = -1;
     public int cutLayoutKey = -1;
 
+    // Size-mismatch paste mode: 0=Hover Position, 1=Menu Selection, 2=Arrow Keys
+    public int sizeMismatchPasteMode = 1;
+
     // Debug logging
     public boolean enableDebugLogging = false;
 

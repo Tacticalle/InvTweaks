@@ -14,14 +14,19 @@ import java.util.function.Consumer;
 
 /**
  * Static utility class that manages a modal overlay for choosing which half
- * of a 54-slot clipboard to paste into a 27-slot container.
- * Shows two side-by-side 9x3 preview grids labeled "Top Half" and "Bottom Half".
+ * to use during size-mismatched pastes (54↔27).
+ * Shows two side-by-side 9x3 preview grids.
+ *
+ * Supports two directions:
+ * - "54to27": choosing which half of a 54-slot clipboard to paste into 27-slot container
+ * - "27to54": choosing where in a 54-slot container to paste 27-slot clipboard items
  */
 public class HalfSelectorOverlay {
 
     private static boolean active = false;
     private static Map<Integer, LayoutClipboard.SlotData> clipboardData = null;
     private static boolean isPlayerOnly = false;
+    private static String direction = "54to27"; // "54to27" or "27to54"
     private static Consumer<String> onSelection = null;
 
     // Preview grid constants
@@ -47,13 +52,26 @@ public class HalfSelectorOverlay {
 
     // ========== PUBLIC API ==========
 
+    /**
+     * Show overlay for 54→27 direction (legacy signature for backwards compatibility).
+     */
     public static void show(Map<Integer, LayoutClipboard.SlotData> data, boolean playerOnly,
                             Consumer<String> callback) {
+        show(data, playerOnly, "54to27", callback);
+    }
+
+    /**
+     * Show overlay with explicit direction.
+     * @param dir "54to27" or "27to54"
+     */
+    public static void show(Map<Integer, LayoutClipboard.SlotData> data, boolean playerOnly,
+                            String dir, Consumer<String> callback) {
         active = true;
         clipboardData = data;
         isPlayerOnly = playerOnly;
+        direction = dir;
         onSelection = callback;
-        InvTweaksConfig.debugLog("HALF-SELECT", "overlay shown | clipboardSize=%d", data.size());
+        InvTweaksConfig.debugLog("HALF-SELECT", "overlay shown | direction=%s | clipboardSize=%d", dir, data.size());
     }
 
     public static void hide() {
@@ -66,6 +84,17 @@ public class HalfSelectorOverlay {
     public static boolean isActive() {
         return active;
     }
+
+    // ========== GRID BOUNDS (for external hit testing) ==========
+
+    public static int getLeftGridX() { return leftGridX; }
+    public static int getLeftGridY() { return leftGridY; }
+    public static int getLeftGridW() { return leftGridW; }
+    public static int getLeftGridH() { return leftGridH; }
+    public static int getRightGridX() { return rightGridX; }
+    public static int getRightGridY() { return rightGridY; }
+    public static int getRightGridW() { return rightGridW; }
+    public static int getRightGridH() { return rightGridH; }
 
     // ========== RENDER ==========
 
@@ -86,16 +115,19 @@ public class HalfSelectorOverlay {
         int centerY = screenHeight / 2;
 
         // Title
-        context.drawCenteredTextWithShadow(textRenderer, Text.literal("Choose layout half to paste"),
+        String titleText = direction.equals("27to54")
+                ? "Choose where to paste"
+                : "Choose layout half to paste";
+        context.drawCenteredTextWithShadow(textRenderer, Text.literal(titleText),
                 centerX, centerY - gridH / 2 - 30, WHITE);
 
-        // Left grid (Top Half: keys 0-26)
+        // Left grid position
         leftGridX = centerX - totalWidth / 2;
         leftGridY = centerY - gridH / 2;
         leftGridW = gridW;
         leftGridH = gridH;
 
-        // Right grid (Bottom Half: keys 27-53)
+        // Right grid position
         rightGridX = centerX + totalWidth / 2 - gridW;
         rightGridY = centerY - gridH / 2;
         rightGridW = gridW;
@@ -110,13 +142,20 @@ public class HalfSelectorOverlay {
         boolean hoverRight = mouseX >= rightGridX - 4 && mouseX <= rightGridX + rightGridW + 4
                 && mouseY >= rightGridY - 4 && mouseY <= rightGridY + rightGridH + 4;
 
-        // Draw left grid with label
-        renderGrid(context, textRenderer, leftGridX, leftGridY, gridW, gridH,
-                clipboardData, 0, 26, "Top Half", hoverLeft);
-
-        // Draw right grid with label
-        renderGrid(context, textRenderer, rightGridX, rightGridY, gridW, gridH,
-                clipboardData, 27, 53, "Bottom Half", hoverRight);
+        if (direction.equals("27to54")) {
+            // 27→54: both grids show the same clipboard items (keys 0-26)
+            // Labels indicate the TARGET position in the 54-slot container
+            renderGrid(context, textRenderer, leftGridX, leftGridY, gridW, gridH,
+                    clipboardData, 0, 26, "Top Half", hoverLeft);
+            renderGrid(context, textRenderer, rightGridX, rightGridY, gridW, gridH,
+                    clipboardData, 0, 26, "Bottom Half", hoverRight);
+        } else {
+            // 54→27: left grid shows top half (keys 0-26), right shows bottom half (keys 27-53)
+            renderGrid(context, textRenderer, leftGridX, leftGridY, gridW, gridH,
+                    clipboardData, 0, 26, "Top Half", hoverLeft);
+            renderGrid(context, textRenderer, rightGridX, rightGridY, gridW, gridH,
+                    clipboardData, 27, 53, "Bottom Half", hoverRight);
+        }
 
         // Keyboard hint labels below grids
         int hintY = leftGridY + gridH + 8;

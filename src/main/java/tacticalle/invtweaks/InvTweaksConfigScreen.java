@@ -3,7 +3,6 @@ package tacticalle.invtweaks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.Selectable;
 import net.minecraft.client.gui.screen.Screen;
@@ -361,6 +360,10 @@ public class InvTweaksConfigScreen extends Screen {
         entryList.addConfigEntry(new FeatureEntry("Copy/Paste Layout", toggleW,
                 () -> config.enableCopyPaste, v -> config.enableCopyPaste = v));
 
+        // Container paste settings
+        entryList.addConfigEntry(new SectionHeaderEntry("\u00a7l--- Container Paste ---"));
+        addSizeMismatchModeEntry();
+
         // Display settings
         entryList.addConfigEntry(new SectionHeaderEntry("\u00a7l--- Display ---"));
         entryList.addConfigEntry(new FeatureEntry("Show Overlay Messages", toggleW,
@@ -373,6 +376,23 @@ public class InvTweaksConfigScreen extends Screen {
         entryList.addConfigEntry(new IntValueEntry("Auto-delete after (hrs playtime)", 0, 500,
                 () -> config.clipboardExpiryPlaytimeHours, v -> config.clipboardExpiryPlaytimeHours = v));
         entryList.addConfigEntry(new InfoTextEntry("  (0 = never expire)", DARK_GRAY));
+    }
+
+    // ---- Size mismatch mode cycling entry ----
+
+    private static final String[] SIZE_MISMATCH_MODE_LABELS = {"Hover Position", "Menu Selection", "Arrow Keys"};
+
+    private void addSizeMismatchModeEntry() {
+        int cycleBtnW = scaledButtonWidth(110);
+        String currentLabel = SIZE_MISMATCH_MODE_LABELS[Math.max(0, Math.min(2, config.sizeMismatchPasteMode))];
+        ButtonWidget cycleBtn = ButtonWidget.builder(
+                Text.literal(currentLabel),
+                button -> {
+                    config.sizeMismatchPasteMode = (config.sizeMismatchPasteMode + 1) % 3;
+                    button.setMessage(Text.literal(SIZE_MISMATCH_MODE_LABELS[config.sizeMismatchPasteMode]));
+                }
+        ).dimensions(0, 0, cycleBtnW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new CyclingModeEntry("Size Mismatch Mode", cycleBtn));
     }
 
     // ---- Debug section ----
@@ -1023,6 +1043,35 @@ public class InvTweaksConfigScreen extends Screen {
         public List<? extends Element> children() { return List.of(minusBtn, valueBtn, plusBtn); }
         @Override
         public List<? extends Selectable> selectableChildren() { return List.of(minusBtn, valueBtn, plusBtn); }
+    }
+
+    // ========== Cycling mode row (for sizeMismatchPasteMode) ==========
+
+    private class CyclingModeEntry extends ConfigEntry {
+        private final String label;
+        private final ButtonWidget cycleBtn;
+
+        CyclingModeEntry(String label, ButtonWidget cycleBtn) {
+            this.label = label;
+            this.cycleBtn = cycleBtn;
+        }
+
+        @Override
+        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+            int x = getX();
+            int y = getY();
+            int w = getWidth();
+            context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, WHITE);
+            int btnX = x + w - cycleBtn.getWidth();
+            cycleBtn.setX(btnX);
+            cycleBtn.setY(y);
+            cycleBtn.render(context, mouseX, mouseY, delta);
+        }
+
+        @Override
+        public List<? extends Element> children() { return List.of(cycleBtn); }
+        @Override
+        public List<? extends Selectable> selectableChildren() { return List.of(cycleBtn); }
     }
 
     // Override keyPressed to route to active IntValueEntry edit mode

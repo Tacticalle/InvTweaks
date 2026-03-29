@@ -23,9 +23,13 @@ import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.screen.slot.SlotActionType;
 
+import tacticalle.invtweaks.ContainerClassifier;
+import tacticalle.invtweaks.ContainerClassifier.ContainerCategory;
 import tacticalle.invtweaks.InvTweaksConfig;
 import tacticalle.invtweaks.InvTweaksOverlay;
 import tacticalle.invtweaks.LayoutClipboard;
+
+import net.minecraft.client.gui.Click;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -46,6 +50,9 @@ public abstract class HandledScreenMixin {
     @Unique private Map<Integer, Integer> it_preClickSnapshot = null;
     @Unique private String it_shiftClickMode = null;
     @Unique private int it_shiftClickSlotId = -1;
+
+    // Container classification (cached per screen open)
+    @Unique private ContainerCategory it_containerCategory = null;
 
     // Bundle insert tracking
     @Unique private int it_bundleInsertSlotCount = 0;
@@ -600,6 +607,24 @@ public abstract class HandledScreenMixin {
             }
         }
 
+        // ========== CONTAINER CLASSIFICATION + INCOMPATIBLE BLOCKING ==========
+        if (!isPlayerOnly) {
+            if (it_containerCategory == null) {
+                it_containerCategory = ContainerClassifier.classifyContainer(handler);
+                InvTweaksConfig.debugLog("CLASSIFY", "%s \u2192 %s",
+                        handler.getClass().getSimpleName(),
+                        ContainerClassifier.getCategoryName(it_containerCategory));
+            }
+            if (it_containerCategory == ContainerCategory.INCOMPATIBLE) {
+                if (copyTriggered || pasteTriggered || cutTriggered) {
+                    InvTweaksOverlay.show("Incompatible", 0xFFFF8800);
+                    cir.setReturnValue(true);
+                    return;
+                }
+                // Clipboard history browser is allowed to open in incompatible containers
+            }
+        }
+
         // ========== REGULAR CLIPBOARD HANDLING ==========
         if (copyTriggered) {
             // Copy layout
@@ -641,54 +666,80 @@ public abstract class HandledScreenMixin {
                 int containerSize = tacticalle.invtweaks.LayoutClipboard.getContainerSlotCount(handler);
 
                 if (clipSize != containerSize) {
-                    // Size mismatch — handle 54↔27 cases
-                    if (clipSize == 54 && containerSize == 27) {
-                        // Show HalfSelectorOverlay
-                        InvTweaksConfig.debugLog("HALF-SELECT", "size mismatch 54->27, showing half selector");
-                        tacticalle.invtweaks.HalfSelectorOverlay.show(
-                                activeEntry.snapshot.slots, isPlayerOnly,
-                                (half) -> {
-                                    Map<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> sliced =
-                                            tacticalle.invtweaks.LayoutClipboard.sliceClipboardHalf(
-                                                    activeEntry.snapshot.slots, half);
-                                    tacticalle.invtweaks.LayoutClipboard.PasteResult result =
-                                            tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly, sliced);
-                                    it_showPasteResult(result);
-                                }
-                        );
-                        cir.setReturnValue(true);
-                        return;
-                    } else if (clipSize == 27 && containerSize == 54) {
-                        // Auto-paste into top rows (slots 0-26) — pass clipboard data as override
-                        InvTweaksConfig.debugLog("HALF-SELECT", "27->54 auto-paste into top rows");
-                        tacticalle.invtweaks.LayoutClipboard.PasteResult result =
-                                tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly,
-                                        activeEntry.snapshot.slots);
-                        // Custom message with "(top half)" suffix
-                        if (result.quantityMaxOnly) {
-                            if (result.slotsPlaced > 0) {
-                                tacticalle.invtweaks.InvTweaksOverlay.show("Stacks topped up", 0xFF55FF55);
-                            } else {
-                                tacticalle.invtweaks.InvTweaksOverlay.show("Layout already matches!", 0xFF55FF55);
-                            }
-                        } else if (result.alreadyMatched) {
-                            tacticalle.invtweaks.InvTweaksOverlay.show("Layout already matches!", 0xFF55FF55);
-                        } else if (result.noMatchingItems) {
-                            tacticalle.invtweaks.InvTweaksOverlay.show("No matching items available", 0xFFFFFF55);
-                        } else if (result.slotsPlaced == result.slotsTotal) {
-                            tacticalle.invtweaks.InvTweaksOverlay.show("Layout pasted (top half)", 0xFF55FF55);
-                            if (result.cursorWasOccupied) {
-                                tacticalle.invtweaks.InvTweaksOverlay.show("Items on cursor held", 0xFFFFFF55);
-                            }
-                        } else if (result.slotsPlaced > 0) {
-                            tacticalle.invtweaks.InvTweaksOverlay.show(
-                                    "Layout partially pasted (" + result.slotsPlaced + "/" + result.slotsTotal + " slots, top half)", 0xFFFFAA00);
-                            tacticalle.invtweaks.InvTweaksOverlay.show("No room for remaining items", 0xFFFFFF55);
-                        } else {
-                            tacticalle.invtweaks.InvTweaksOverlay.show("Could not paste layout \u2014 no room", 0xFFFF5555);
+                    // Size mismatch — handle 54↔27 cases with configurable mode
+                    if ((clipSize == 54 && containerSize == 27) || (clipSize == 27 && containerSize == 54)) {
+                        int pasteMode = config.sizeMismatchPasteMode;
+                        boolean is54to27 = (clipSize == 54 && containerSize == 27);
+                        String direction = is54to27 ? "54\u219227" : "27\u219254";
+                        String modeName = pasteMode == 0 ? "hover" : pasteMode == 1 ? "menu" : "arrow";
+                        InvTweaksConfig.debugLog("SIZE-MISMATCH", "direction=%s | mode=%s", direction, modeName);
+
+                        if (is54to27) {
+                            // 54→27: always use Menu mode (player needs preview to choose clipboard half)
+                            final boolean finalIsPlayerOnly = isPlayerOnly;
+                            InvTweaksConfig.debugLog("SIZE-MISMATCH", "54→27 forced menu mode");
+                            tacticalle.invtweaks.HalfSelectorOverlay.show(
+                                    activeEntry.snapshot.slots, isPlayerOnly, "54to27",
+                                    (half) -> {
+                                        Map<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> sliced =
+                                                tacticalle.invtweaks.LayoutClipboard.sliceClipboardHalf(
+                                                        activeEntry.snapshot.slots, half);
+                                        tacticalle.invtweaks.LayoutClipboard.PasteResult result =
+                                                tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, finalIsPlayerOnly, sliced);
+                                        it_showPasteResult(result);
+                                    }
+                            );
+                            cir.setReturnValue(true);
+                            return;
                         }
-                        cir.setReturnValue(true);
-                        return;
+
+                        // 27→54: respect sizeMismatchPasteMode config
+                        if (pasteMode == 0) {
+                            // Mode 0: Hover Position — instant paste based on cursor Y
+                            String half = it_getHoverHalf((HandledScreen<?>)(Object)this);
+                            InvTweaksConfig.debugLog("SIZE-MISMATCH", "hover selected %s half", half);
+                            Map<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> shifted =
+                                    it_shiftClipboardForHalf(activeEntry.snapshot.slots, half);
+                            tacticalle.invtweaks.LayoutClipboard.PasteResult result =
+                                    tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly, shifted);
+                            it_showPasteResultWithHalf(result, half);
+                            cir.setReturnValue(true);
+                            return;
+                        } else if (pasteMode == 1) {
+                            // Mode 1: Menu Selection — show HalfSelectorOverlay
+                            final boolean finalIsPlayerOnly = isPlayerOnly;
+                            tacticalle.invtweaks.HalfSelectorOverlay.show(
+                                    activeEntry.snapshot.slots, isPlayerOnly, "27to54",
+                                    (half) -> {
+                                        Map<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> shifted =
+                                                it_shiftClipboardForHalf(activeEntry.snapshot.slots, half);
+                                        tacticalle.invtweaks.LayoutClipboard.PasteResult result =
+                                                tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, finalIsPlayerOnly, shifted);
+                                        it_showPasteResultWithHalf(result, half);
+                                    }
+                            );
+                            cir.setReturnValue(true);
+                            return;
+                        } else {
+                            // Mode 2: Arrow Keys — check Up/Down at paste time
+                            boolean upHeld = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_UP) == GLFW.GLFW_PRESS;
+                            boolean downHeld = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_DOWN) == GLFW.GLFW_PRESS;
+                            if (upHeld == downHeld) {
+                                InvTweaksOverlay.show("Hold \u2191/\u2193 to select half", 0xFFFFFF55);
+                                InvTweaksConfig.debugLog("SIZE-MISMATCH", "arrow mode: no valid key held, cancelled");
+                                cir.setReturnValue(true);
+                                return;
+                            }
+                            String half = upHeld ? "top" : "bottom";
+                            InvTweaksConfig.debugLog("SIZE-MISMATCH", "arrow selected %s half", half);
+                            Map<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> shifted =
+                                    it_shiftClipboardForHalf(activeEntry.snapshot.slots, half);
+                            tacticalle.invtweaks.LayoutClipboard.PasteResult result =
+                                    tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly, shifted);
+                            it_showPasteResultWithHalf(result, half);
+                            cir.setReturnValue(true);
+                            return;
+                        }
                     } else {
                         // Other size mismatches still blocked
                         tacticalle.invtweaks.InvTweaksOverlay.show("Layout size incompatible", 0xFFFFFF55);
@@ -797,7 +848,104 @@ public abstract class HandledScreenMixin {
                 result.itemsInserted, result.itemsTotal, result.missingItems);
     }
 
-    // ========== HALF-SELECTOR OVERLAY DELEGATION ==========
+    // ========== HOVER HALF DETECTION (Mode 0) ==========
+
+    @Unique
+    private String it_getHoverHalf(HandledScreen<?> screen) {
+        tacticalle.invtweaks.mixin.HandledScreenAccessor accessor = (tacticalle.invtweaks.mixin.HandledScreenAccessor) screen;
+        int guiY = accessor.getY();
+
+        int containerMinY = Integer.MAX_VALUE;
+        int containerMaxY = Integer.MIN_VALUE;
+        for (int i = 0; i < handler.slots.size(); i++) {
+            Slot slot = handler.slots.get(i);
+            if (!(slot.inventory instanceof net.minecraft.entity.player.PlayerInventory)) {
+                if (slot.y < containerMinY) containerMinY = slot.y;
+                if (slot.y > containerMaxY) containerMaxY = slot.y;
+            }
+        }
+
+        if (containerMinY == Integer.MAX_VALUE) {
+            InvTweaksConfig.debugLog("SIZE-MISMATCH", "hover: no container slots found, defaulting to top");
+            return "top";
+        }
+
+        int slotHeight = 18;
+        int containerTopPx = guiY + containerMinY;
+        int containerBottomPx = guiY + containerMaxY + slotHeight;
+        int midpoint = (containerTopPx + containerBottomPx) / 2;
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+        double mouseY = mc.mouse.getY() * mc.getWindow().getScaledHeight() / mc.getWindow().getHeight();
+
+        InvTweaksConfig.debugLog("SIZE-MISMATCH", "hover: mouseY=%.0f | containerTop=%d | containerBottom=%d | midpoint=%d",
+                mouseY, containerTopPx, containerBottomPx, midpoint);
+
+        return mouseY < midpoint ? "top" : "bottom";
+    }
+
+    // ========== 27→54 CLIPBOARD SHIFTING ==========
+
+    /**
+     * For 27→54 paste: shift clipboard keys so items land in the chosen half of a 54-slot container.
+     * "top" = keys stay 0-26, "bottom" = keys become 27-53.
+     */
+    @Unique
+    private static Map<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> it_shiftClipboardForHalf(
+            Map<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> clipboardSlots, String half) {
+        if (half.equals("top")) {
+            // Keys 0-26 stay as-is — paste into top rows of 54-slot container
+            return clipboardSlots;
+        }
+        // Shift keys by 27 so they target bottom rows (27-53)
+        Map<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> shifted = new HashMap<>();
+        for (Map.Entry<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> entry : clipboardSlots.entrySet()) {
+            shifted.put(entry.getKey() + 27, entry.getValue());
+        }
+        return shifted;
+    }
+
+    // ========== SIZE-MISMATCH PASTE RESULT WITH HALF LABEL ==========
+
+    @Unique
+    private void it_showPasteResultWithHalf(tacticalle.invtweaks.LayoutClipboard.PasteResult result, String half) {
+        String halfLabel = half.equals("top") ? "top half" : "bottom half";
+        if (result.quantityMaxOnly) {
+            if (result.slotsPlaced > 0) {
+                tacticalle.invtweaks.InvTweaksOverlay.show("Stacks topped up", 0xFF55FF55);
+            } else {
+                tacticalle.invtweaks.InvTweaksOverlay.show("Layout already matches!", 0xFF55FF55);
+            }
+        } else if (result.alreadyMatched) {
+            tacticalle.invtweaks.InvTweaksOverlay.show("Layout already matches!", 0xFF55FF55);
+        } else if (result.noMatchingItems) {
+            tacticalle.invtweaks.InvTweaksOverlay.show("No matching items available", 0xFFFFFF55);
+        } else if (result.slotsPlaced == result.slotsTotal) {
+            tacticalle.invtweaks.InvTweaksOverlay.show("Layout pasted (" + halfLabel + ")", 0xFF55FF55);
+            if (result.cursorWasOccupied) {
+                tacticalle.invtweaks.InvTweaksOverlay.show("Items on cursor held", 0xFFFFFF55);
+            }
+        } else if (result.slotsPlaced > 0) {
+            tacticalle.invtweaks.InvTweaksOverlay.show(
+                    "Layout partially pasted (" + result.slotsPlaced + "/" + result.slotsTotal + " slots, " + halfLabel + ")", 0xFFFFAA00);
+            tacticalle.invtweaks.InvTweaksOverlay.show("No room for remaining items", 0xFFFFFF55);
+        } else {
+            tacticalle.invtweaks.InvTweaksOverlay.show("Could not paste layout \u2014 no room", 0xFFFF5555);
+        }
+    }
+
+    // ========== MOUSE CLICK INTERCEPT FOR HALFSELECTOROVERLAY ==========
+
+    @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
+    private void onMouseClicked(Click click, boolean focused, CallbackInfoReturnable<Boolean> cir) {
+        if (tacticalle.invtweaks.HalfSelectorOverlay.isActive()) {
+            double mouseX = click.x();
+            double mouseY = click.y();
+            if (tacticalle.invtweaks.HalfSelectorOverlay.mouseClicked(mouseX, mouseY, click.button())) {
+                cir.setReturnValue(true);
+            }
+        }
+    }
 
     // ========== SCROLL TRANSFER ==========
 

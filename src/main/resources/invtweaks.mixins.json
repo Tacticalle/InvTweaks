@@ -3,6 +3,7 @@
 	"package": "tacticalle.invtweaks.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
+		"AnvilScreenMixin",
 		"ClientPlayerMixin",
 		"HandledScreenAccessor",
 		"HandledScreenMixin"

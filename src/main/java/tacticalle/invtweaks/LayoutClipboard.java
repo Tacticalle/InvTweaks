@@ -703,10 +703,10 @@ public class LayoutClipboard {
 
             List<Integer> clipboardSlotIdsSorted = new ArrayList<>(clipboardSlots.keySet());
             Collections.sort(clipboardSlotIdsSorted);
-            int slotsToProcess = Math.min(clipboardSlotIdsSorted.size(), containerSlotIds.size());
-            for (int i = 0; i < slotsToProcess; i++) {
+            for (int i = 0; i < clipboardSlotIdsSorted.size(); i++) {
                 int clipSlotId = clipboardSlotIdsSorted.get(i);
-                int actualSlotId = containerSlotIds.get(i);
+                if (clipSlotId >= containerSlotIds.size()) continue;
+                int actualSlotId = containerSlotIds.get(clipSlotId);
                 targetLayout.put(actualSlotId, clipboardSlots.get(clipSlotId));
             }
         }

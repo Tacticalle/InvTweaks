@@ -118,20 +118,25 @@ public class InvTweaksOverlay {
             List<OrderedText> lines = textRenderer.wrapLines(Text.literal(msg.text()), maxTextWidth);
             int textHeight = lines.size() * textRenderer.fontHeight;
 
+            // Measure the widest line to size the background snugly
+            int actualTextWidth = 0;
+            for (OrderedText line : lines) {
+                int lineWidth = textRenderer.getWidth(line);
+                if (lineWidth > actualTextWidth) actualTextWidth = lineWidth;
+            }
+
             // Draw background
             int bgX1 = renderX - BG_PADDING_H;
             int bgY1 = currentY - BG_PADDING_V;
-            int bgX2 = renderX + maxTextWidth + BG_PADDING_H;
+            int bgX2 = renderX + actualTextWidth + BG_PADDING_H;
             int bgY2 = currentY + textHeight + BG_PADDING_V;
             int bgColor = (alphaInt * 3 / 4) << 24; // semi-transparent black
             context.fill(bgX1, bgY1, bgX2, bgY2, bgColor);
 
-            // Draw text lines — centered horizontally within the box
+            // Draw text lines
             int textColor = (msg.color() & 0x00FFFFFF) | (alphaInt << 24);
             for (int i = 0; i < lines.size(); i++) {
-                int lineWidth = textRenderer.getWidth(lines.get(i));
-                int lineX = renderX + (maxTextWidth - lineWidth) / 2;
-                context.drawTextWithShadow(textRenderer, lines.get(i), lineX, currentY + i * textRenderer.fontHeight, textColor);
+                context.drawTextWithShadow(textRenderer, lines.get(i), renderX, currentY + i * textRenderer.fontHeight, textColor);
             }
 
             currentY = bgY2 + MESSAGE_GAP;
