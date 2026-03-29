@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.7.0] - 2026-03-29
+
+### Features
+- **Container Classification System** — New `ContainerClassifier` categorizes open containers into 8 types: Standard, Grid9 (dispensers, droppers, crafters, crafting tables), Hopper, Furnace, Crafter, Crafting Table, Player-Only, and Incompatible. Classification fires on clipboard key press and gates copy/paste/cut behavior per container type.
+- **Incompatible Container Blocking** — Copy, paste, and cut are blocked in 10 incompatible containers: villager trading, anvil, enchanting table, grindstone, loom, cartography table, beacon, brewing stand, stonecutter, and smithing table. Shows "Incompatible" overlay message. Clipboard history browser (Shift+Tab) still opens normally in these containers.
+- **Small Container Clipboard Types** — Three new clipboard entry types for small containers: `grid9` (dispensers, droppers, crafters, crafting tables — 9 slots), `hopper5` (hoppers, hopper minecarts — 5 slots), and `furnace2` (furnaces, blast furnaces, smokers — 2 slots: input + fuel, output excluded). Each type has its own active index in the clipboard history.
+- **Container-Specific Copy** — Each container type copies only the relevant slots: crafting tables exclude the output slot (slot 0) and remap inputs to keys 0-8; furnaces exclude the output slot (slot 2) and copy only input + fuel; crafters capture lock state as `SlotData.LOCKED` sentinel for disabled slots.
+- **Container-Specific Paste** — Cross-type paste guards ensure clipboard entries only paste into compatible containers (grid9 → grid9/crafter/crafting table, hopper5 → hoppers, furnace2 → furnaces). Mismatches show descriptive messages.
+- **Crafter Lock-State Support** — Copying a crafter captures which slots are disabled. Pasting into a crafter toggles each slot's lock state to match the clipboard before placing items. Pasting a crafter clipboard into a non-crafter container skips locked entries and shows "(N locked slots skipped)".
+- **Even Distribution for Small Containers** — Grid9, hopper5, and furnace2 pastes distribute items evenly across target slots instead of maximizing individual stack quantities. Algorithm: group by item type, calculate floor(available / numSlots), distribute remainder in reading order. Handles re-paste correctly by including items already in target slots. Standard containers (chests) continue to use quantity maximization.
+- **Size-Mismatch Paste Modes** — New `sizeMismatchPasteMode` config (int, default 1): 0 = Hover Position (cursor Y relative to container midpoint), 1 = Menu Selection (HalfSelectorOverlay with preview grids and A/D/click selection), 2 = Arrow Keys (hold Up/Down while pressing paste). Only affects the 27→54 direction; 54→27 always uses Menu mode for preview visibility.
+- **HalfSelectorOverlay Mouse Click Support** — Clicking a preview grid in the half-selector overlay now selects that half. Clicking outside dismisses the overlay. Implemented via mouseClicked HEAD injection in HandledScreenMixin.
+- **HalfSelectorOverlay Direction Support** — The overlay now supports both 54→27 and 27→54 directions with appropriate labels for each.
+- **Clipboard History Browser Updates** — Grid9 entries display as a 3×3 grid with locked slots in dark red. Hopper5 entries display as a 5×1 horizontal row. Furnace2 entries display as 2×1 side-by-side slots. Slot count summaries show "X/9 slots taken", "X/5 slots taken", "X/2 slots taken" as appropriate.
+
+### Bug Fixes
+- **Fixed overlay background stretching** — `InvTweaksOverlay` background width now fits text content instead of stretching across the screen at small GUI scales
+- **Fixed Yarn name for dispenser/dropper handler** — `Generic3x3ScreenHandler` corrected to `Generic3x3ContainerScreenHandler` (1.21.11 Yarn)
+- **Fixed crafter lock toggle mechanism** — Changed from `SlotActionType.PICKUP` to `interactionManager.clickButton(syncId, slotIndex)`, matching vanilla crafter behavior
+- **Fixed even distribution counting** — Target slots excluded from available item count, quantity overrides respected in paste loop, `alreadyMatches` shortcut bypassed during even distribution, source slots re-ranked per target slot, filled targets protected from sourcing, items already in target slots included in total pool calculation
+- **Fixed ambiguous overload** — `pasteLayout(handler, isPlayerOnly, null)` disambiguated with explicit cast to resolve `Map<Integer,SlotData>` vs `ContainerCategory` overload
+- **Fixed crafter-to-dispenser paste** — Override data from filtered LOCKED entries no longer bypasses displacement logic
+- **Fixed hover mode Y detection** — Midpoint calculation now uses container slot area instead of full GUI background height
+- **Fixed 27→54 bottom-half paste offset** — Slot offset logic for bottom-half paste now correctly adds +27 to target indices
+
 ## [1.6.1] - 2026-03-22
 
 ### Bug Fixes

@@ -16,8 +16,12 @@ A client-side Fabric mod for Minecraft that gives you precise control over how m
 - **Scroll Transfer** — Scroll up to move matching items to the container, scroll down to move them to your inventory
 - **Scroll Leave-1** — Hold a modifier key (default: `Ctrl`) while scrolling to leave one behind in each slot
 - **Copy/Paste Layout** — Ctrl+C to snapshot a container or inventory layout (including armor and offhand), Ctrl+V to rearrange items to match, Ctrl+X to cut. All three keybinds are configurable in the Hotkeys tab. Paste fills each slot to max stack size using available items. Component data (enchantments, potion types, etc.) is tracked for accurate matching. Paste works even with items on your cursor (uses shift-click only to keep cursor items safe). Partial paste places as many items as possible when room is limited.
-- **Half-Selector for Size Mismatches** — Pasting a double chest layout into a single chest shows an interactive overlay to choose the Top Half or Bottom Half. Pasting a single chest layout into a double chest automatically fills the top rows.
-- **Clipboard History** — Maintains a history of past clipboard snapshots. Press Shift+Tab (configurable) while an inventory is open to browse, select, or delete saved layouts with item preview grids and vanilla-style hover tooltips. Supports multi-select deletion (Shift+click for range, Ctrl/Cmd+click to toggle). Duplicate copies automatically replace older identical entries.
+- **Small Container Clipboard** — Copy and paste layouts for dispensers, droppers, crafters, crafting tables (grid9), hoppers (hopper5), and furnaces/blast furnaces/smokers (furnace2). Each type has its own clipboard category and active index. Crafting tables exclude the output slot; furnaces exclude the output slot and copy only input + fuel.
+- **Crafter Lock Support** — Copying a crafter captures which slots are disabled. Pasting into a crafter toggles slots to match the clipboard's lock state before placing items. Pasting a crafter clipboard into a non-crafter skips locked entries.
+- **Even Distribution** — Small container pastes (grid9, hopper5, furnace2) distribute items evenly across target slots instead of maximizing individual stacks. Standard containers (chests) continue to maximize.
+- **Container Classification** — Containers are automatically classified by type. Incompatible containers (villager trading, anvil, enchanting table, grindstone, loom, cartography table, beacon, brewing stand, stonecutter, smithing table) block copy/paste/cut operations with an "Incompatible" message.
+- **Half-Selector for Size Mismatches** — Pasting a double chest layout into a single chest shows an interactive overlay to choose the Top Half or Bottom Half (click or press A/D). Pasting a single chest layout into a double chest supports three modes (configurable): hover position, menu selection, or arrow keys.
+- **Clipboard History** — Maintains a history of past clipboard snapshots. Press Shift+Tab (configurable) while an inventory is open to browse, select, or delete saved layouts with item preview grids and vanilla-style hover tooltips. Supports multi-select deletion (Shift+click for range, Ctrl/Cmd+click to toggle). Duplicate copies automatically replace older identical entries. Small container entries display with type-appropriate grid layouts (3×3, 5×1, 2×1).
 - **Death Auto-Snapshot** — Player inventory (including armor and offhand) is automatically saved to clipboard history on death so you can paste your layout back after respawning
 - **Persistent Clipboard** — Clipboard history is saved to disk and survives game restarts
 - **Message Overlay** — Feedback messages render next to the GUI instead of in chat. Can be toggled off via the `showOverlayMessages` config option.
@@ -72,7 +76,8 @@ InvTweaks includes specific handling for macOS `Cmd+Shift+Click` bulk-move behav
 ### Known Limitations
 
 - **Creative Mode** — InvTweaks does not currently work in the player's inventory while in Creative mode. Creative inventory uses a different screen handler that bypasses the standard slot interaction system. Scroll transfer in Creative inventory is also disabled to avoid conflicting with Creative tab scrolling.
-- **Size-Mismatched Paste** — Pasting between a single chest (27 slots) and double chest (54 slots) is handled with a half-selector overlay or auto-paste. Other size mismatches (dispensers, hoppers, crafting tables, etc.) are still blocked.
+- **Incompatible Containers** — Copy, paste, and cut are blocked in containers where layout operations don't apply: villager trading, anvil, enchanting table, grindstone, loom, cartography table, beacon, brewing stand, stonecutter, and smithing table. The clipboard history browser still opens normally in these containers.
+- **Animal Chests** — Mule, donkey, and llama chests are not yet supported for clipboard operations.
 
 ## Building from Source
 
