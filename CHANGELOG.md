@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.8.0] - 2026-03-29
+
+### Features
+- **Single-Level Paste/Cut Undo** — Press Ctrl+Z (or configured `undoKey`) after a paste or cut to restore the pre-operation state. Covers all container types (standard, grid9, crafter, crafting table, hopper, furnace, player-only). Single-level: each new paste/cut overwrites the previous undo snapshot. In-memory only — snapshot is cleared when the inventory screen is closed.
+- **Configurable Undo Key** — New `undoKey` config field (default: Ctrl+Z legacy). Set a specific GLFW key code to use a single-key undo bind instead.
+- **Undo Overlay Messages** — "Paste undone" (green) on full restore, "Paste partially undone (X/Y slots)" (yellow) on partial restore, "Nothing to undo" (red) when no snapshot exists.
+
+### Bug Fixes
+- **Fixed source exhaustion in undo executor** — Sequential find-and-move mutated handler state, causing later moves to fail. Replaced with pre-planned move algorithm using a claimed sources set.
+- **Fixed cursor stash slot used as undo source** — Stash slot is now added to claimed sources before planning, preventing it from being consumed during item restoration.
+- **Fixed correct slots used as undo sources** — Undo no longer grabs items from slots that already match their snapshot state. Source search restricted to diff-only slots.
+- **Fixed stash slot snapshot not restored** — Added Phase 4 post-cursor-restore to handle the stash slot's original item after cursor pickup.
+- **Fixed Phase 3+4 cursor conflict** — Merged cursor restore and stash slot restore into a single sequence with temp-slot juggling to avoid left-click conflicts with an occupied cursor.
+- **Fixed crafter undo lock phase ordering** — Paste does locks→items, so undo now does items→locks (reverse order), allowing items to be picked up from still-unlocked slots before toggling.
+- **Fixed count mismatch from even distribution** — Undo now uses type-only matching with multi-source merging instead of `ItemStack.areEqual()`, handling cases where paste redistributed stack counts (e.g., 62→4×15).
+- **Fixed left-click depositing entire stack during undo** — Undo now uses right-click loop for exact count placement when the source stack is larger than the target needs.
+
+### Notes
+- Bundle paste undo is not supported (deferred post-2.0 — bundle undo requires component manipulation, not slot rearrangement)
+- Cut in player-only inventory does not capture an undo snapshot (no items are moved)
+- If items are manually moved between paste/cut and undo, undo reports partial restoration as expected
+
 ## [1.7.0] - 2026-03-29
 
 ### Features

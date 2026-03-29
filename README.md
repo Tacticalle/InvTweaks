@@ -22,6 +22,7 @@ A client-side Fabric mod for Minecraft that gives you precise control over how m
 - **Container Classification** — Containers are automatically classified by type. Incompatible containers (villager trading, anvil, enchanting table, grindstone, loom, cartography table, beacon, brewing stand, stonecutter, smithing table) block copy/paste/cut operations with an "Incompatible" message.
 - **Half-Selector for Size Mismatches** — Pasting a double chest layout into a single chest shows an interactive overlay to choose the Top Half or Bottom Half (click or press A/D). Pasting a single chest layout into a double chest supports three modes (configurable): hover position, menu selection, or arrow keys.
 - **Clipboard History** — Maintains a history of past clipboard snapshots. Press Shift+Tab (configurable) while an inventory is open to browse, select, or delete saved layouts with item preview grids and vanilla-style hover tooltips. Supports multi-select deletion (Shift+click for range, Ctrl/Cmd+click to toggle). Duplicate copies automatically replace older identical entries. Small container entries display with type-appropriate grid layouts (3×3, 5×1, 2×1).
+- **Paste/Cut Undo** — Press Ctrl+Z (or a configured key) after pasting or cutting to restore the pre-operation state. Single-level undo: each new paste/cut overwrites the previous snapshot. In-memory only, cleared when the inventory screen is closed. Works across all supported container types.
 - **Death Auto-Snapshot** — Player inventory (including armor and offhand) is automatically saved to clipboard history on death so you can paste your layout back after respawning
 - **Persistent Clipboard** — Clipboard history is saved to disk and survives game restarts
 - **Message Overlay** — Feedback messages render next to the GUI instead of in chat. Can be toggled off via the `showOverlayMessages` config option.
@@ -56,6 +57,7 @@ The config screen has four tabs: All (everything), Tweaks (feature toggles), Hot
 | Scroll Up/Down | Transfer all matching items |
 | `Ctrl` + Scroll | Transfer matching items, leave 1 |
 | `Ctrl`+C / `Ctrl`+V / `Ctrl`+X | Copy / Paste / Cut layout (configurable) |
+| `Ctrl`+Z | Undo last paste/cut (configurable) |
 | `Shift`+`Tab` | Open clipboard history browser (configurable) |
 | `K` | Open config screen |
 
@@ -77,6 +79,7 @@ InvTweaks includes specific handling for macOS `Cmd+Shift+Click` bulk-move behav
 
 - **Creative Mode** — InvTweaks does not currently work in the player's inventory while in Creative mode. Creative inventory uses a different screen handler that bypasses the standard slot interaction system. Scroll transfer in Creative inventory is also disabled to avoid conflicting with Creative tab scrolling.
 - **Incompatible Containers** — Copy, paste, and cut are blocked in containers where layout operations don't apply: villager trading, anvil, enchanting table, grindstone, loom, cartography table, beacon, brewing stand, stonecutter, and smithing table. The clipboard history browser still opens normally in these containers.
+- **Bundle Paste Undo** — Undo is not supported after bundle paste operations. Ctrl+Z after a bundle paste shows "Nothing to undo."
 - **Animal Chests** — Mule, donkey, and llama chests are not yet supported for clipboard operations.
 
 ## Building from Source
