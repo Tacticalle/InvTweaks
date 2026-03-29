@@ -103,6 +103,424 @@ public class LayoutClipboard {
         }
     }
 
+    // ========== UNDO SYSTEM ==========
+
+    /**
+     * A snapshot of all handler slots for single-level undo.
+     */
+    public static class UndoSnapshot {
+        public final Map<Integer, ItemStack> slotStates;
+        public final Map<Integer, Boolean> crafterLockStates;
+        public final boolean isPlayerOnly;
+        public final ContainerClassifier.ContainerCategory category;
+
+        public UndoSnapshot(Map<Integer, ItemStack> slotStates,
+                            Map<Integer, Boolean> crafterLockStates,
+                            boolean isPlayerOnly,
+                            ContainerClassifier.ContainerCategory category) {
+            this.slotStates = slotStates;
+            this.crafterLockStates = crafterLockStates;
+            this.isPlayerOnly = isPlayerOnly;
+            this.category = category;
+        }
+    }
+
+    /**
+     * Result of an undo operation.
+     */
+    public static class UndoResult {
+        public final int slotsRestored;
+        public final int slotsTotal;
+        public final boolean success;
+
+        public UndoResult(int slotsRestored, int slotsTotal) {
+            this.slotsRestored = slotsRestored;
+            this.slotsTotal = slotsTotal;
+            this.success = (slotsRestored == slotsTotal);
+        }
+    }
+
+    private static UndoSnapshot undoSnapshot = null;
+
+    /**
+     * Capture an undo snapshot of all handler slots.
+     * Call this BEFORE paste or cut logic runs.
+     */
+    public static void captureUndoSnapshot(ScreenHandler handler,
+                                            ContainerClassifier.ContainerCategory category,
+                                            boolean isPlayerOnly) {
+        Map<Integer, ItemStack> slotStates = new HashMap<>();
+        for (int i = 0; i < handler.slots.size(); i++) {
+            slotStates.put(i, handler.getSlot(i).getStack().copy());
+        }
+
+        Map<Integer, Boolean> crafterLockStates = null;
+        if (category == ContainerClassifier.ContainerCategory.CRAFTER) {
+            crafterLockStates = new HashMap<>();
+            if (handler instanceof net.minecraft.screen.CrafterScreenHandler crafterHandler) {
+                for (int i = 0; i < 9; i++) {
+                    try {
+                        crafterLockStates.put(i, crafterHandler.isSlotDisabled(i));
+                    } catch (Exception e) {
+                        InvTweaksConfig.debugLog("UNDO", "isSlotDisabled failed for slot %d: %s", i, e.getMessage());
+                        crafterLockStates.put(i, false);
+                    }
+                }
+            }
+        }
+
+        undoSnapshot = new UndoSnapshot(slotStates, crafterLockStates, isPlayerOnly, category);
+        InvTweaksConfig.debugLog("UNDO", "Snapshot captured | slots=%d | category=%s | crafterLocks=%s",
+                slotStates.size(),
+                category != null ? category.name() : "PLAYER_ONLY",
+                crafterLockStates != null ? String.valueOf(crafterLockStates.size()) : "none");
+    }
+
+    /**
+     * Get the current undo snapshot (for null-checking in the mixin).
+     */
+    public static UndoSnapshot getUndoSnapshot() {
+        return undoSnapshot;
+    }
+
+    /**
+     * Clear the undo snapshot (call on screen close).
+     */
+    public static void clearUndoSnapshot() {
+        if (undoSnapshot != null) {
+            undoSnapshot = null;
+            InvTweaksConfig.debugLog("UNDO", "Snapshot cleared (screen close)");
+        }
+    }
+
+    /**
+     * Execute a single-level undo, restoring all handler slots to the snapshot state.
+     */
+    public static UndoResult executeUndo(ScreenHandler handler) {
+        if (undoSnapshot == null) {
+            return null;
+        }
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+        ClientPlayerInteractionManager im = mc.interactionManager;
+        PlayerEntity player = mc.player;
+        if (im == null || player == null) {
+            undoSnapshot = null;
+            return null;
+        }
+
+        UndoSnapshot snapshot = undoSnapshot;
+        undoSnapshot = null;
+
+        int diffCount = 0;
+        int restored = 0;
+
+        // Phase 0: Cursor stash
+        int cursorStashSlot = -1;
+        ItemStack cursorStack = handler.getCursorStack();
+        if (cursorStack != null && !cursorStack.isEmpty()) {
+            for (int i = 0; i < handler.slots.size(); i++) {
+                if (handler.getSlot(i).getStack().isEmpty()) {
+                    im.clickSlot(handler.syncId, i, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    cursorStashSlot = i;
+                    InvTweaksConfig.debugLog("UNDO", "stashed cursor in slot %d", i);
+                    break;
+                }
+            }
+            if (cursorStashSlot == -1) {
+                InvTweaksConfig.debugLog("UNDO", "cannot stash cursor — no empty slot");
+            }
+        }
+
+        // Phase 2: Build diff list (excluding cursor stash slot)
+        List<Integer> diffSlots = new ArrayList<>();
+        for (Map.Entry<Integer, ItemStack> entry : snapshot.slotStates.entrySet()) {
+            int slotIdx = entry.getKey();
+            if (slotIdx >= handler.slots.size()) continue;
+            if (slotIdx == cursorStashSlot) continue;
+            ItemStack snapshotStack = entry.getValue();
+            ItemStack currentStack = handler.getSlot(slotIdx).getStack();
+            if (!ItemStack.areItemsAndComponentsEqual(snapshotStack, currentStack)
+                    || snapshotStack.getCount() != currentStack.getCount()) {
+                diffSlots.add(slotIdx);
+            }
+        }
+        diffCount = diffSlots.size();
+        InvTweaksConfig.debugLog("UNDO", "Executing undo | diffSlots=%d cursorStashSlot=%d", diffCount, cursorStashSlot);
+
+        if (diffCount == 0) {
+            if (cursorStashSlot >= 0) {
+                im.clickSlot(handler.syncId, cursorStashSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+            }
+            return new UndoResult(0, 0);
+        }
+
+        // Build full diff set across all handler slots so available sources exclude
+        // slots that are already correct per the snapshot.
+        Set<Integer> diffSlotSet = new HashSet<>(diffSlots);
+        for (int i = 0; i < handler.slots.size(); i++) {
+            if (i == cursorStashSlot) continue;
+            ItemStack snapshotStack = snapshot.slotStates.get(i);
+            if (snapshotStack == null) snapshotStack = ItemStack.EMPTY;
+            ItemStack currentStack = handler.getSlot(i).getStack();
+            if (!ItemStack.areItemsAndComponentsEqual(snapshotStack, currentStack)
+                    || snapshotStack.getCount() != currentStack.getCount()) {
+                diffSlotSet.add(i);
+            }
+        }
+
+        // Available sources: diff slots that currently hold items
+        LinkedHashSet<Integer> availableSources = new LinkedHashSet<>();
+        for (int slot : diffSlotSet) {
+            if (!handler.getSlot(slot).getStack().isEmpty()) {
+                availableSources.add(slot);
+            }
+        }
+
+        // Separate diff slots into targets needing items vs targets needing to be empty
+        List<Integer> targetsNeedingItems = new ArrayList<>();
+        List<Integer> targetsNeedingEmpty = new ArrayList<>();
+        for (int slot : diffSlots) {
+            ItemStack snapshotStack = snapshot.slotStates.get(slot);
+            if (snapshotStack == null) snapshotStack = ItemStack.EMPTY;
+            if (!snapshotStack.isEmpty()) {
+                targetsNeedingItems.add(slot);
+            } else if (!handler.getSlot(slot).getStack().isEmpty()) {
+                targetsNeedingEmpty.add(slot);
+            }
+        }
+
+        // Phase 2a: Fill targets that need items, merging from multiple sources if needed
+        for (int target : targetsNeedingItems) {
+            ItemStack snapshotStack = snapshot.slotStates.get(target);
+            int needed = snapshotStack.getCount();
+
+            ItemStack currentTarget = handler.getSlot(target).getStack();
+            int currentCount = 0;
+
+            if (!currentTarget.isEmpty()) {
+                if (matchesTypeAndComponents(currentTarget, snapshotStack)) {
+                    // Right type — start from existing count (may already be partially filled)
+                    currentCount = currentTarget.getCount();
+                } else {
+                    // Wrong type — clear the target and make its items available as a source
+                    im.clickSlot(handler.syncId, target, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    int tempSlot = findAnyEmptySlot(handler, target, cursorStashSlot);
+                    if (tempSlot >= 0) {
+                        im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                        availableSources.add(tempSlot);
+                    }
+                    // If no temp slot, cursor still holds wrong item — proceed anyway
+                }
+            }
+
+            // Fill target from available sources of matching type
+            Iterator<Integer> sourceIter = availableSources.iterator();
+            while (sourceIter.hasNext() && currentCount < needed) {
+                int source = sourceIter.next();
+                if (source == target) continue;
+                ItemStack sourceStack = handler.getSlot(source).getStack();
+                if (sourceStack.isEmpty()) {
+                    sourceIter.remove();
+                    continue;
+                }
+                if (!matchesTypeAndComponents(sourceStack, snapshotStack)) continue;
+
+                // Pick up entire source stack
+                im.clickSlot(handler.syncId, source, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                ItemStack pickedUp = handler.getCursorStack();
+                if (pickedUp == null || pickedUp.isEmpty()) continue;
+
+                int cursorCount = pickedUp.getCount();
+                int stillNeeded = needed - currentCount;
+
+                if (cursorCount <= stillNeeded) {
+                    // Source has <= what target needs — left-click deposits all
+                    im.clickSlot(handler.syncId, target, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    currentCount += cursorCount;
+                    // Cursor is now empty — source fully consumed
+                    sourceIter.remove();
+                } else {
+                    // Source has more than target needs — right-click exactly stillNeeded times
+                    for (int rc = 0; rc < stillNeeded; rc++) {
+                        im.clickSlot(handler.syncId, target, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
+                    }
+                    currentCount += stillNeeded;
+                    // Put remainder back in source
+                    im.clickSlot(handler.syncId, source, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    // If source wasn't empty (edge case), find any empty slot for overflow
+                    ItemStack cursorCheck = handler.getCursorStack();
+                    if (cursorCheck != null && !cursorCheck.isEmpty()) {
+                        for (int i = 0; i < handler.slots.size(); i++) {
+                            if (i == cursorStashSlot) continue;
+                            if (handler.getSlot(i).getStack().isEmpty()) {
+                                im.clickSlot(handler.syncId, i, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                                availableSources.add(i);
+                                break;
+                            }
+                        }
+                    }
+                    // Source still has leftover — keep it in availableSources
+                }
+            }
+            InvTweaksConfig.debugLog("UNDO", "Target slot %d: needed=%d got=%d", target, needed, currentCount);
+        }
+
+        // Phase 2b: Empty slots that should be empty
+        // Many are already empty after their items were consumed as sources above
+        for (int target : targetsNeedingEmpty) {
+            if (!handler.getSlot(target).getStack().isEmpty()) {
+                im.clickSlot(handler.syncId, target, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.QUICK_MOVE, player);
+            }
+        }
+
+        // Phase 1 (deferred for crafter): Crafter lock restore — runs AFTER item moves so that
+        // items can be picked up from unlocked slots before locks are re-applied.
+        if (snapshot.category == ContainerClassifier.ContainerCategory.CRAFTER
+                && snapshot.crafterLockStates != null
+                && handler instanceof net.minecraft.screen.CrafterScreenHandler crafterHandler) {
+            for (Map.Entry<Integer, Boolean> entry : snapshot.crafterLockStates.entrySet()) {
+                int slotIdx = entry.getKey();
+                boolean wantDisabled = entry.getValue();
+                try {
+                    boolean currentDisabled = crafterHandler.isSlotDisabled(slotIdx);
+                    if (currentDisabled != wantDisabled) {
+                        boolean newEnabled = !wantDisabled;
+                        crafterHandler.setSlotEnabled(slotIdx, newEnabled);
+                        im.slotChangedState(slotIdx, handler.syncId, newEnabled);
+                        InvTweaksConfig.debugLog("UNDO", "crafter lock toggle slot %d: was %s, want %s",
+                                slotIdx, currentDisabled, wantDisabled);
+                    }
+                } catch (Exception e) {
+                    InvTweaksConfig.debugLog("UNDO", "crafter lock restore failed for slot %d: %s", slotIdx, e.getMessage());
+                }
+            }
+        }
+
+        // Phase 3+4: Combined cursor restore and stash slot restoration
+        if (cursorStashSlot >= 0) {
+            ItemStack stashSnapshot = snapshot.slotStates.get(cursorStashSlot);
+            if (stashSnapshot == null) stashSnapshot = ItemStack.EMPTY;
+
+            // Step 1: Pick up cursor item from stash slot (restores cursor)
+            if (!handler.getSlot(cursorStashSlot).getStack().isEmpty()) {
+                im.clickSlot(handler.syncId, cursorStashSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+            }
+            // Cursor now holds original cursor item. Stash slot is empty.
+
+            if (!stashSnapshot.isEmpty()) {
+                // Snapshot says stash slot should have a specific item.
+                // Need to: deposit cursor item in temp → pick up snapshot item → place in stash → pick up cursor from temp.
+
+                // Step 2: Find an empty temp slot for the cursor item
+                int tempSlot = -1;
+                for (int i = 0; i < handler.slots.size(); i++) {
+                    if (i == cursorStashSlot) continue;
+                    if (handler.getSlot(i).getStack().isEmpty()) {
+                        tempSlot = i;
+                        break;
+                    }
+                }
+
+                if (tempSlot >= 0) {
+                    // Step 3: Deposit cursor item in temp
+                    im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    // Cursor is empty. Cursor item is in tempSlot.
+
+                    // Step 4: Find snapshot item in a slot that's still wrong per its own snapshot
+                    final ItemStack stashSnapshotFinal = stashSnapshot;
+                    for (int i = 0; i < handler.slots.size(); i++) {
+                        if (i == cursorStashSlot || i == tempSlot) continue;
+                        ItemStack candidateCurrent = handler.getSlot(i).getStack();
+                        ItemStack candidateSnapshot = snapshot.slotStates.get(i);
+                        if (candidateSnapshot == null) candidateSnapshot = ItemStack.EMPTY;
+                        if (ItemStack.areItemsAndComponentsEqual(candidateCurrent, candidateSnapshot)
+                                && candidateCurrent.getCount() == candidateSnapshot.getCount()) continue;
+                        if (ItemStack.areItemsAndComponentsEqual(candidateCurrent, stashSnapshotFinal)
+                                && candidateCurrent.getCount() == stashSnapshotFinal.getCount()) {
+                            im.clickSlot(handler.syncId, i, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                            im.clickSlot(handler.syncId, cursorStashSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                            InvTweaksConfig.debugLog("UNDO", "Phase 3+4: stash snapshot moved from slot %d to slot %d", i, cursorStashSlot);
+                            break;
+                        }
+                    }
+
+                    // Step 5: Pick cursor item back up from temp
+                    if (!handler.getSlot(tempSlot).getStack().isEmpty()) {
+                        im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    }
+                    // Cursor now holds original cursor item.
+                } else {
+                    InvTweaksConfig.debugLog("UNDO", "Phase 3+4: no temp slot for cursor juggle — cursor restored, stash slot left empty");
+                }
+            }
+            // If stashSnapshot is empty: stash slot is already empty after step 1. Done.
+        }
+
+        // Verify: out of all originally-differing slots (plus stash slot), how many are now correct?
+        int verifiedRestored = 0;
+        Set<Integer> checkSlots = new HashSet<>(diffSlots);
+        if (cursorStashSlot >= 0 && snapshot.slotStates.containsKey(cursorStashSlot)) {
+            checkSlots.add(cursorStashSlot);
+        }
+        for (int slotIdx : checkSlots) {
+            if (slotIdx >= handler.slots.size()) continue;
+            ItemStack snapshotStack = snapshot.slotStates.get(slotIdx);
+            ItemStack currentStack = handler.getSlot(slotIdx).getStack();
+            if (snapshotStack == null) snapshotStack = ItemStack.EMPTY;
+            if (ItemStack.areItemsAndComponentsEqual(snapshotStack, currentStack)
+                    && snapshotStack.getCount() == currentStack.getCount()) {
+                verifiedRestored++;
+            }
+        }
+        InvTweaksConfig.debugLog("UNDO", "Undo complete | restored=%d/%d", verifiedRestored, checkSlots.size());
+        return new UndoResult(verifiedRestored, checkSlots.size());
+    }
+
+    /** True if a and b have the same item type and components, ignoring stack count. */
+    private static boolean matchesTypeAndComponents(ItemStack a, ItemStack b) {
+        if (a.isEmpty() && b.isEmpty()) return true;
+        if (a.isEmpty() || b.isEmpty()) return false;
+        return ItemStack.areItemsAndComponentsEqual(a, b);
+    }
+
+    /**
+     * Find where a snapshot item currently lives in the handler.
+     * Only searches diffSlots (slots that don't already match the snapshot),
+     * skipping already-claimed slots. Prefers the closest slot to the target.
+     */
+    private static int findSourceForUndo(ScreenHandler handler, ItemStack target,
+                                          int targetSlot, Set<Integer> excludeSlots,
+                                          Set<Integer> diffSlots) {
+        int bestSlot = -1;
+        int bestDist = Integer.MAX_VALUE;
+        for (int i : diffSlots) {
+            if (i == targetSlot) continue;
+            if (excludeSlots.contains(i)) continue;
+            ItemStack current = handler.getSlot(i).getStack();
+            if (ItemStack.areItemsAndComponentsEqual(current, target)
+                    && current.getCount() == target.getCount()) {
+                int dist = Math.abs(i - targetSlot);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestSlot = i;
+                }
+            }
+        }
+        return bestSlot;
+    }
+
+    /**
+     * Find any empty slot in the handler, excluding specified slots.
+     */
+    private static int findAnyEmptySlot(ScreenHandler handler, int exclude1, int exclude2) {
+        for (int i = 0; i < handler.slots.size(); i++) {
+            if (i == exclude1 || i == exclude2) continue;
+            if (handler.getSlot(i).getStack().isEmpty()) return i;
+        }
+        return -1;
+    }
+
     // Entry type constants
     public static final String TYPE_CONTAINER = "container";
     public static final String TYPE_PLAYER = "player";

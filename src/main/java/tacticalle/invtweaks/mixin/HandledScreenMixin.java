@@ -565,7 +565,19 @@ public abstract class HandledScreenMixin {
             cutTriggered = keyCode == config.cutLayoutKey;
         }
 
-        if (!copyTriggered && !pasteTriggered && !cutTriggered) return;
+        // Undo: configurable key or legacy Ctrl+Z / Cmd+Z
+        boolean undoTriggered;
+        if (config.undoKey == -1) {
+            boolean ctrlPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS ||
+                                  GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS;
+            boolean superPressed = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_SUPER) == GLFW.GLFW_PRESS ||
+                                   GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_SUPER) == GLFW.GLFW_PRESS;
+            undoTriggered = (ctrlPressed || superPressed) && keyCode == GLFW.GLFW_KEY_Z;
+        } else {
+            undoTriggered = keyCode == config.undoKey;
+        }
+
+        if (!copyTriggered && !pasteTriggered && !cutTriggered && !undoTriggered) return;
 
         boolean isPlayerOnly = it_isPlayerOnlyScreen();
 
@@ -674,6 +686,7 @@ public abstract class HandledScreenMixin {
             // For category-aware containers, use category-aware paste directly
             if (!isPlayerOnly && it_containerCategory != null
                     && it_containerCategory != ContainerCategory.STANDARD) {
+                LayoutClipboard.captureUndoSnapshot(handler, it_containerCategory, false);
                 tacticalle.invtweaks.LayoutClipboard.PasteResult result =
                         tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly, it_containerCategory);
                 it_showPasteResult(result);
@@ -711,6 +724,7 @@ public abstract class HandledScreenMixin {
                             tacticalle.invtweaks.HalfSelectorOverlay.show(
                                     activeEntry.snapshot.slots, isPlayerOnly, "54to27",
                                     (half) -> {
+                                        LayoutClipboard.captureUndoSnapshot(handler, ContainerCategory.STANDARD, false);
                                         Map<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> sliced =
                                                 tacticalle.invtweaks.LayoutClipboard.sliceClipboardHalf(
                                                         activeEntry.snapshot.slots, half);
@@ -728,6 +742,7 @@ public abstract class HandledScreenMixin {
                             // Mode 0: Hover Position — instant paste based on cursor Y
                             String half = it_getHoverHalf((HandledScreen<?>)(Object)this);
                             InvTweaksConfig.debugLog("SIZE-MISMATCH", "hover selected %s half", half);
+                            LayoutClipboard.captureUndoSnapshot(handler, ContainerCategory.STANDARD, false);
                             Map<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> shifted =
                                     it_shiftClipboardForHalf(activeEntry.snapshot.slots, half);
                             tacticalle.invtweaks.LayoutClipboard.PasteResult result =
@@ -741,6 +756,7 @@ public abstract class HandledScreenMixin {
                             tacticalle.invtweaks.HalfSelectorOverlay.show(
                                     activeEntry.snapshot.slots, isPlayerOnly, "27to54",
                                     (half) -> {
+                                        LayoutClipboard.captureUndoSnapshot(handler, ContainerCategory.STANDARD, false);
                                         Map<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> shifted =
                                                 it_shiftClipboardForHalf(activeEntry.snapshot.slots, half);
                                         tacticalle.invtweaks.LayoutClipboard.PasteResult result =
@@ -762,6 +778,7 @@ public abstract class HandledScreenMixin {
                             }
                             String half = upHeld ? "top" : "bottom";
                             InvTweaksConfig.debugLog("SIZE-MISMATCH", "arrow selected %s half", half);
+                            LayoutClipboard.captureUndoSnapshot(handler, ContainerCategory.STANDARD, false);
                             Map<Integer, tacticalle.invtweaks.LayoutClipboard.SlotData> shifted =
                                     it_shiftClipboardForHalf(activeEntry.snapshot.slots, half);
                             tacticalle.invtweaks.LayoutClipboard.PasteResult result =
@@ -780,6 +797,9 @@ public abstract class HandledScreenMixin {
             }
 
             // Normal paste (sizes match or player-only)
+            ContainerCategory undoCategory = isPlayerOnly ? ContainerCategory.PLAYER_ONLY :
+                    (it_containerCategory != null ? it_containerCategory : ContainerCategory.STANDARD);
+            LayoutClipboard.captureUndoSnapshot(handler, undoCategory, isPlayerOnly);
             tacticalle.invtweaks.LayoutClipboard.PasteResult result =
                     tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly);
             it_showPasteResult(result);
@@ -788,13 +808,44 @@ public abstract class HandledScreenMixin {
             // Cut layout — route through container category
             InvTweaksConfig.debugLog("CUT", "cut triggered | playerOnly=%s | category=%s", isPlayerOnly,
                     isPlayerOnly ? "PLAYER_ONLY" : (it_containerCategory != null ? ContainerClassifier.getCategoryName(it_containerCategory) : "null"));
+            if (!isPlayerOnly) {
+                ContainerCategory cutCategory = it_containerCategory != null ? it_containerCategory : ContainerCategory.STANDARD;
+                LayoutClipboard.captureUndoSnapshot(handler, cutCategory, false);
+            }
             if (!isPlayerOnly && it_containerCategory != null) {
                 tacticalle.invtweaks.LayoutClipboard.cutLayout(handler, isPlayerOnly, it_containerCategory);
             } else {
                 tacticalle.invtweaks.LayoutClipboard.cutLayout(handler, isPlayerOnly);
             }
             cir.setReturnValue(true);
+        } else if (undoTriggered) {
+            // Undo last paste/cut
+            InvTweaksConfig.debugLog("UNDO", "undo triggered");
+            if (LayoutClipboard.getUndoSnapshot() == null) {
+                InvTweaksOverlay.show("Nothing to undo", 0xFFFF5555);
+                cir.setReturnValue(true);
+                return;
+            }
+            LayoutClipboard.UndoResult undoResult = LayoutClipboard.executeUndo(handler);
+            if (undoResult == null) {
+                InvTweaksOverlay.show("Nothing to undo", 0xFFFF5555);
+            } else if (undoResult.slotsTotal == 0) {
+                InvTweaksOverlay.show("Paste undone", 0xFF55FF55);
+            } else if (undoResult.success) {
+                InvTweaksOverlay.show("Paste undone", 0xFF55FF55);
+            } else {
+                InvTweaksOverlay.show("Paste partially undone (" + undoResult.slotsRestored + "/" + undoResult.slotsTotal + " slots)", 0xFFFFFF55);
+            }
+            cir.setReturnValue(true);
         }
+    }
+
+    // ========== SCREEN CLOSE — UNDO CLEANUP ==========
+
+    @Inject(method = "close", at = @At("HEAD"))
+    private void onClose(CallbackInfo ci) {
+        LayoutClipboard.clearUndoSnapshot();
+        it_containerCategory = null;
     }
 
     // ========== PASTE RESULT DISPLAY ==========

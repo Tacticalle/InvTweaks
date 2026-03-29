@@ -275,6 +275,12 @@ public class InvTweaksConfigScreen extends Screen {
         ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
         entryList.addConfigEntry(new KeyBindEntry("Cut Layout:", "(default: Ctrl+X)", GREEN, cutLayoutKeyBtn));
 
+        ButtonWidget undoKeyBtn = ButtonWidget.builder(
+                Text.literal(InvTweaksConfig.getKeyName(config.undoKey)),
+                button -> startCapture("undoKey", button)
+        ).dimensions(0, 0, keyBtnW, BUTTON_HEIGHT).build();
+        entryList.addConfigEntry(new KeyBindEntry("Undo Paste:", "(default: Ctrl+Z)", GREEN, undoKeyBtn));
+
         ButtonWidget clipboardHistoryKeyBtn = ButtonWidget.builder(
                 Text.literal(InvTweaksConfig.getKeyName(config.clipboardHistoryKey)),
                 button -> startCapture("clipboardHistoryKey", button)
@@ -462,6 +468,11 @@ public class InvTweaksConfigScreen extends Screen {
             if (capturingButton != null) {
                 capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
             }
+        } else if (capturingKey.equals("undoKey")) {
+            config.undoKey = keyCode;
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(keyCode)));
+            }
         } else if (capturingKey.equals("clipboardHistoryKey")) {
             config.clipboardHistoryKey = keyCode;
             if (capturingButton != null) {
@@ -524,6 +535,10 @@ public class InvTweaksConfigScreen extends Screen {
         } else if (capturingKey.equals("cutLayoutKey")) {
             if (capturingButton != null) {
                 capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.cutLayoutKey)));
+            }
+        } else if (capturingKey.equals("undoKey")) {
+            if (capturingButton != null) {
+                capturingButton.setMessage(Text.literal(InvTweaksConfig.getKeyName(config.undoKey)));
             }
         } else if (capturingKey.equals("clipboardHistoryKey")) {
             if (capturingButton != null) {

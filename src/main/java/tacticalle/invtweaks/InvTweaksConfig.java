@@ -69,6 +69,7 @@ public class InvTweaksConfig {
     public int copyLayoutKey = -1;
     public int pasteLayoutKey = -1;
     public int cutLayoutKey = -1;
+    public int undoKey = -1;
 
     // Size-mismatch paste mode: 0=Hover Position, 1=Menu Selection, 2=Arrow Keys
     public int sizeMismatchPasteMode = 1;
