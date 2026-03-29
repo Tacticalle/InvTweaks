@@ -627,9 +627,14 @@ public abstract class HandledScreenMixin {
 
         // ========== REGULAR CLIPBOARD HANDLING ==========
         if (copyTriggered) {
-            // Copy layout
-            InvTweaksConfig.debugLog("COPY", "copy triggered | playerOnly=%s", isPlayerOnly);
-            tacticalle.invtweaks.LayoutClipboard.copyLayout(handler, isPlayerOnly);
+            // Copy layout — route through container category
+            InvTweaksConfig.debugLog("COPY", "copy triggered | playerOnly=%s | category=%s", isPlayerOnly,
+                    isPlayerOnly ? "PLAYER_ONLY" : (it_containerCategory != null ? ContainerClassifier.getCategoryName(it_containerCategory) : "null"));
+            if (!isPlayerOnly && it_containerCategory != null) {
+                tacticalle.invtweaks.LayoutClipboard.copyLayout(handler, isPlayerOnly, false, it_containerCategory);
+            } else {
+                tacticalle.invtweaks.LayoutClipboard.copyLayout(handler, isPlayerOnly);
+            }
             cir.setReturnValue(true);
         } else if (pasteTriggered) {
             // Paste layout — with size-mismatch pre-check and HalfSelectorOverlay support
@@ -642,16 +647,41 @@ public abstract class HandledScreenMixin {
             }
 
             // Get active clipboard entry to check size mismatch BEFORE calling paste
-            tacticalle.invtweaks.LayoutClipboard.HistoryEntry activeEntry =
-                    tacticalle.invtweaks.LayoutClipboard.getActiveEntry(isPlayerOnly);
+            tacticalle.invtweaks.LayoutClipboard.HistoryEntry activeEntry;
+            if (!isPlayerOnly && it_containerCategory != null) {
+                activeEntry = tacticalle.invtweaks.LayoutClipboard.getActiveEntry(isPlayerOnly, it_containerCategory);
+            } else {
+                activeEntry = tacticalle.invtweaks.LayoutClipboard.getActiveEntry(isPlayerOnly);
+            }
 
             if (activeEntry == null) {
-                tacticalle.invtweaks.InvTweaksOverlay.show("No layout copied", 0xFFFF5555);
+                // Category-specific "no layout" messages
+                if (!isPlayerOnly && it_containerCategory != null) {
+                    String msg = switch (it_containerCategory) {
+                        case GRID9, CRAFTER, CRAFTING_TABLE -> "No grid layout copied";
+                        case HOPPER -> "No hopper layout copied";
+                        case FURNACE -> "No furnace layout copied";
+                        default -> "No layout copied";
+                    };
+                    tacticalle.invtweaks.InvTweaksOverlay.show(msg, 0xFFFF8800);
+                } else {
+                    tacticalle.invtweaks.InvTweaksOverlay.show("No layout copied", 0xFFFF5555);
+                }
                 cir.setReturnValue(true);
                 return;
             }
 
-            // Check type mismatch
+            // For category-aware containers, use category-aware paste directly
+            if (!isPlayerOnly && it_containerCategory != null
+                    && it_containerCategory != ContainerCategory.STANDARD) {
+                tacticalle.invtweaks.LayoutClipboard.PasteResult result =
+                        tacticalle.invtweaks.LayoutClipboard.pasteLayout(handler, isPlayerOnly, it_containerCategory);
+                it_showPasteResult(result);
+                cir.setReturnValue(true);
+                return;
+            }
+
+            // Check type mismatch (for STANDARD and player-only)
             if (activeEntry.snapshot.isPlayerInventory != isPlayerOnly) {
                 String clipType = activeEntry.snapshot.isPlayerInventory ? "player inventory" : "container";
                 String currentType = isPlayerOnly ? "player inventory" : "container";
@@ -755,9 +785,14 @@ public abstract class HandledScreenMixin {
             it_showPasteResult(result);
             cir.setReturnValue(true);
         } else if (cutTriggered) {
-            // Cut layout
-            InvTweaksConfig.debugLog("CUT", "cut triggered | playerOnly=%s", isPlayerOnly);
-            tacticalle.invtweaks.LayoutClipboard.cutLayout(handler, isPlayerOnly);
+            // Cut layout — route through container category
+            InvTweaksConfig.debugLog("CUT", "cut triggered | playerOnly=%s | category=%s", isPlayerOnly,
+                    isPlayerOnly ? "PLAYER_ONLY" : (it_containerCategory != null ? ContainerClassifier.getCategoryName(it_containerCategory) : "null"));
+            if (!isPlayerOnly && it_containerCategory != null) {
+                tacticalle.invtweaks.LayoutClipboard.cutLayout(handler, isPlayerOnly, it_containerCategory);
+            } else {
+                tacticalle.invtweaks.LayoutClipboard.cutLayout(handler, isPlayerOnly);
+            }
             cir.setReturnValue(true);
         }
     }
@@ -810,6 +845,11 @@ public abstract class HandledScreenMixin {
             tacticalle.invtweaks.InvTweaksOverlay.show("No room for remaining items", 0xFFFFFF55);
         } else {
             tacticalle.invtweaks.InvTweaksOverlay.show("Could not paste layout \u2014 no room", 0xFFFF5555);
+        }
+
+        if (result.lockedSlotsSkipped > 0) {
+            tacticalle.invtweaks.InvTweaksOverlay.show(
+                    result.lockedSlotsSkipped + " locked slot" + (result.lockedSlotsSkipped == 1 ? "" : "s") + " skipped", 0xFFFF8800);
         }
 
         InvTweaksConfig.debugLog("PASTE", "result displayed | placed=%d/%d | cursor=%s",

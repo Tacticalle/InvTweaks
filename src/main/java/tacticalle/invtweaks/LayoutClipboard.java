@@ -29,6 +29,7 @@ import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
+import tacticalle.invtweaks.ContainerClassifier;
 
 /**
  * Clipboard-based copy/paste of container layouts with history support.
@@ -43,7 +44,15 @@ public class LayoutClipboard {
      * A snapshot of one slot's contents.
      * The components field stores serialized NBT component data (null for simple items or old entries).
      */
-    public record SlotData(Item item, int count, String components) {}
+    public record SlotData(Item item, int count, String components) {
+        /** Sentinel value representing a locked crafter slot. */
+        public static final SlotData LOCKED = new SlotData(null, 0, "LOCKED");
+
+        /** Check if this SlotData represents a locked crafter slot. */
+        public static boolean isLocked(SlotData sd) {
+            return sd != null && sd.item() == null && "LOCKED".equals(sd.components());
+        }
+    }
 
     /**
      * A snapshot of a container layout.
@@ -98,12 +107,18 @@ public class LayoutClipboard {
     public static final String TYPE_CONTAINER = "container";
     public static final String TYPE_PLAYER = "player";
     public static final String TYPE_BUNDLE = "bundle";
+    public static final String TYPE_GRID9 = "grid9";
+    public static final String TYPE_HOPPER5 = "hopper5";
+    public static final String TYPE_FURNACE2 = "furnace2";
 
     // History ring
     private static final List<HistoryEntry> history = new ArrayList<>();
     private static int activeContainerIndex = -1;
     private static int activePlayerIndex = -1;
     private static int activeBundleIndex = -1;
+    private static int activeGrid9Index = -1;
+    private static int activeHopper5Index = -1;
+    private static int activeFurnace2Index = -1;
 
     // ========== HISTORY ACCESS ==========
 
@@ -141,6 +156,36 @@ public class LayoutClipboard {
         }
     }
 
+    public static int getActiveGrid9Index() {
+        return activeGrid9Index;
+    }
+
+    public static void setActiveGrid9Index(int index) {
+        if (index >= -1 && index < history.size()) {
+            activeGrid9Index = index;
+        }
+    }
+
+    public static int getActiveHopper5Index() {
+        return activeHopper5Index;
+    }
+
+    public static void setActiveHopper5Index(int index) {
+        if (index >= -1 && index < history.size()) {
+            activeHopper5Index = index;
+        }
+    }
+
+    public static int getActiveFurnace2Index() {
+        return activeFurnace2Index;
+    }
+
+    public static void setActiveFurnace2Index(int index) {
+        if (index >= -1 && index < history.size()) {
+            activeFurnace2Index = index;
+        }
+    }
+
     /**
      * Set the active index for the given history entry (auto-detects type).
      */
@@ -153,6 +198,15 @@ public class LayoutClipboard {
         } else if (entry.snapshot.isPlayerInventory) {
             activePlayerIndex = index;
             InvTweaksConfig.debugLog("CLIPBOARD", "setActiveIndex: player=%d label=%s", index, entry.label);
+        } else if (TYPE_GRID9.equals(entry.entryType)) {
+            activeGrid9Index = index;
+            InvTweaksConfig.debugLog("CLIPBOARD", "setActiveIndex: grid9=%d label=%s", index, entry.label);
+        } else if (TYPE_HOPPER5.equals(entry.entryType)) {
+            activeHopper5Index = index;
+            InvTweaksConfig.debugLog("CLIPBOARD", "setActiveIndex: hopper5=%d label=%s", index, entry.label);
+        } else if (TYPE_FURNACE2.equals(entry.entryType)) {
+            activeFurnace2Index = index;
+            InvTweaksConfig.debugLog("CLIPBOARD", "setActiveIndex: furnace2=%d label=%s", index, entry.label);
         } else {
             activeContainerIndex = index;
             InvTweaksConfig.debugLog("CLIPBOARD", "setActiveIndex: container=%d label=%s", index, entry.label);
@@ -179,6 +233,21 @@ public class LayoutClipboard {
         } else if (activeBundleIndex > index) {
             activeBundleIndex--;
         }
+        if (activeGrid9Index == index) {
+            activeGrid9Index = -1;
+        } else if (activeGrid9Index > index) {
+            activeGrid9Index--;
+        }
+        if (activeHopper5Index == index) {
+            activeHopper5Index = -1;
+        } else if (activeHopper5Index > index) {
+            activeHopper5Index--;
+        }
+        if (activeFurnace2Index == index) {
+            activeFurnace2Index = -1;
+        } else if (activeFurnace2Index > index) {
+            activeFurnace2Index--;
+        }
         ClipboardStorage.save();
     }
 
@@ -187,6 +256,9 @@ public class LayoutClipboard {
         activeContainerIndex = -1;
         activePlayerIndex = -1;
         activeBundleIndex = -1;
+        activeGrid9Index = -1;
+        activeHopper5Index = -1;
+        activeFurnace2Index = -1;
         ClipboardStorage.save();
     }
 
@@ -200,12 +272,21 @@ public class LayoutClipboard {
         if (activeContainerIndex >= 0) activeContainerIndex++;
         if (activePlayerIndex >= 0) activePlayerIndex++;
         if (activeBundleIndex >= 0) activeBundleIndex++;
+        if (activeGrid9Index >= 0) activeGrid9Index++;
+        if (activeHopper5Index >= 0) activeHopper5Index++;
+        if (activeFurnace2Index >= 0) activeFurnace2Index++;
 
         // Set the new entry as active for its type
         if (entry.isBundle()) {
             activeBundleIndex = 0;
         } else if (entry.snapshot.isPlayerInventory) {
             activePlayerIndex = 0;
+        } else if (TYPE_GRID9.equals(entry.entryType)) {
+            activeGrid9Index = 0;
+        } else if (TYPE_HOPPER5.equals(entry.entryType)) {
+            activeHopper5Index = 0;
+        } else if (TYPE_FURNACE2.equals(entry.entryType)) {
+            activeFurnace2Index = 0;
         } else {
             activeContainerIndex = 0;
         }
@@ -217,6 +298,9 @@ public class LayoutClipboard {
             if (activeContainerIndex == removeIdx) activeContainerIndex = -1;
             if (activePlayerIndex == removeIdx) activePlayerIndex = -1;
             if (activeBundleIndex == removeIdx) activeBundleIndex = -1;
+            if (activeGrid9Index == removeIdx) activeGrid9Index = -1;
+            if (activeHopper5Index == removeIdx) activeHopper5Index = -1;
+            if (activeFurnace2Index == removeIdx) activeFurnace2Index = -1;
             history.remove(removeIdx);
         }
     }
@@ -258,6 +342,12 @@ public class LayoutClipboard {
                 else if (activePlayerIndex > index) activePlayerIndex--;
                 if (activeBundleIndex == index) activeBundleIndex = -1;
                 else if (activeBundleIndex > index) activeBundleIndex--;
+                if (activeGrid9Index == index) activeGrid9Index = -1;
+                else if (activeGrid9Index > index) activeGrid9Index--;
+                if (activeHopper5Index == index) activeHopper5Index = -1;
+                else if (activeHopper5Index > index) activeHopper5Index--;
+                if (activeFurnace2Index == index) activeFurnace2Index = -1;
+                else if (activeFurnace2Index > index) activeFurnace2Index--;
                 // Don't increment index since we removed
             } else {
                 index++;
@@ -301,6 +391,25 @@ public class LayoutClipboard {
         } else {
             activeBundleIndex = bundleIdx;
         }
+    }
+
+    public static void loadFromStorage(List<HistoryEntry> entries, int containerIdx, int playerIdx, int bundleIdx,
+                                        int grid9Idx, int hopper5Idx, int furnace2Idx) {
+        history.clear();
+        history.addAll(entries);
+        activeContainerIndex = containerIdx;
+        activePlayerIndex = playerIdx;
+        // Backwards compat: validate activeBundleIndex
+        if (bundleIdx >= 0 && bundleIdx < entries.size() && entries.get(bundleIdx).isBundle()) {
+            activeBundleIndex = bundleIdx;
+        } else if (bundleIdx == 0 && (entries.isEmpty() || !entries.get(0).isBundle())) {
+            activeBundleIndex = -1;
+        } else {
+            activeBundleIndex = bundleIdx;
+        }
+        activeGrid9Index = grid9Idx;
+        activeHopper5Index = hopper5Idx;
+        activeFurnace2Index = furnace2Idx;
     }
 
     // ========== COMPONENT SERIALIZATION ==========
@@ -444,6 +553,51 @@ public class LayoutClipboard {
         } else if (activeBundleIndex > dupIndex) {
             activeBundleIndex--;
         }
+        if (activeGrid9Index == dupIndex) {
+            activeGrid9Index = -1;
+        } else if (activeGrid9Index > dupIndex) {
+            activeGrid9Index--;
+        }
+        if (activeHopper5Index == dupIndex) {
+            activeHopper5Index = -1;
+        } else if (activeHopper5Index > dupIndex) {
+            activeHopper5Index--;
+        }
+        if (activeFurnace2Index == dupIndex) {
+            activeFurnace2Index = -1;
+        } else if (activeFurnace2Index > dupIndex) {
+            activeFurnace2Index--;
+        }
+    }
+
+    // ========== CONTAINER CATEGORY HELPERS ==========
+
+    /**
+     * Map a ContainerCategory to the clipboard entry type string.
+     */
+    public static String categoryToEntryType(ContainerClassifier.ContainerCategory category) {
+        return switch (category) {
+            case STANDARD -> TYPE_CONTAINER;
+            case GRID9, CRAFTER, CRAFTING_TABLE -> TYPE_GRID9;
+            case HOPPER -> TYPE_HOPPER5;
+            case FURNACE -> TYPE_FURNACE2;
+            case PLAYER_ONLY -> TYPE_PLAYER;
+            default -> null;
+        };
+    }
+
+    /**
+     * Get the active clipboard index for the given container category.
+     */
+    public static int getActiveIndexForCategory(ContainerClassifier.ContainerCategory category) {
+        return switch (category) {
+            case STANDARD -> activeContainerIndex;
+            case GRID9, CRAFTER, CRAFTING_TABLE -> activeGrid9Index;
+            case HOPPER -> activeHopper5Index;
+            case FURNACE -> activeFurnace2Index;
+            case PLAYER_ONLY -> activePlayerIndex;
+            default -> -1;
+        };
     }
 
     // ========== COPY ==========
@@ -545,6 +699,120 @@ public class LayoutClipboard {
                 slots.size(), isPlayerOnly, label, containerTitle, dupIndex >= 0);
     }
 
+    /**
+     * Copy the current container layout with container category awareness.
+     * Handles crafting table output exclusion, furnace output exclusion, and crafter locked-slot tracking.
+     */
+    public static void copyLayout(ScreenHandler handler, boolean isPlayerOnly, boolean silent,
+                                   ContainerClassifier.ContainerCategory category) {
+        if (isPlayerOnly || category == null) {
+            copyLayout(handler, isPlayerOnly, silent);
+            return;
+        }
+
+        Map<Integer, SlotData> slots = new LinkedHashMap<>();
+
+        switch (category) {
+            case CRAFTING_TABLE -> {
+                // Crafting table: handler slot 0 = output, slots 1-9 = input grid
+                // Copy only input slots, remap to keys 0-8
+                for (int i = 1; i <= 9; i++) {
+                    if (i >= handler.slots.size()) break;
+                    Slot slot = handler.slots.get(i);
+                    ItemStack stack = slot.getStack();
+                    int key = i - 1;
+                    if (stack.isEmpty()) {
+                        slots.put(key, new SlotData(null, 0, null));
+                    } else {
+                        slots.put(key, new SlotData(stack.getItem(), stack.getCount(), serializeComponents(stack)));
+                    }
+                }
+                InvTweaksConfig.debugLog("COPY", "crafting table: copied 9 input slots (output excluded)");
+            }
+            case FURNACE -> {
+                // Furnace: slot 0 = input, slot 1 = fuel, slot 2 = output
+                // Copy only input and fuel (slots 0-1)
+                for (int i = 0; i <= 1; i++) {
+                    if (i >= handler.slots.size()) break;
+                    Slot slot = handler.slots.get(i);
+                    ItemStack stack = slot.getStack();
+                    if (stack.isEmpty()) {
+                        slots.put(i, new SlotData(null, 0, null));
+                    } else {
+                        slots.put(i, new SlotData(stack.getItem(), stack.getCount(), serializeComponents(stack)));
+                    }
+                }
+                InvTweaksConfig.debugLog("COPY", "furnace: copied input + fuel (output excluded)");
+            }
+            case CRAFTER -> {
+                // Crafter: 9 slots (handler slots 0-8), check for locked slots
+                // TODO: verify crafter slot disabled detection in 1.21.11 Yarn
+                // CrafterScreenHandler.isSlotDisabled(int) — NEEDS VERIFICATION
+                for (int i = 0; i < 9; i++) {
+                    if (i >= handler.slots.size()) break;
+                    boolean isLocked = false;
+                    if (handler instanceof net.minecraft.screen.CrafterScreenHandler crafterHandler) {
+                        try {
+                            isLocked = crafterHandler.isSlotDisabled(i);
+                        } catch (Exception e) {
+                            InvTweaksConfig.debugLog("CRAFTER", "isSlotDisabled() failed for slot %d: %s", i, e.getMessage());
+                        }
+                    }
+                    if (isLocked) {
+                        slots.put(i, SlotData.LOCKED);
+                        InvTweaksConfig.debugLog("CRAFTER", "slot %d is locked", i);
+                    } else {
+                        Slot slot = handler.slots.get(i);
+                        ItemStack stack = slot.getStack();
+                        if (stack.isEmpty()) {
+                            slots.put(i, new SlotData(null, 0, null));
+                        } else {
+                            slots.put(i, new SlotData(stack.getItem(), stack.getCount(), serializeComponents(stack)));
+                        }
+                    }
+                }
+                InvTweaksConfig.debugLog("CRAFTER", "copied 9 crafter slots");
+            }
+            default -> {
+                // GRID9, HOPPER, STANDARD: copy all container slots as normal
+                for (int i = 0; i < handler.slots.size(); i++) {
+                    Slot slot = handler.slots.get(i);
+                    if (slot.inventory instanceof PlayerInventory) continue;
+                    ItemStack stack = slot.getStack();
+                    if (stack.isEmpty()) {
+                        slots.put(i, new SlotData(null, 0, null));
+                    } else {
+                        slots.put(i, new SlotData(stack.getItem(), stack.getCount(), serializeComponents(stack)));
+                    }
+                }
+            }
+        }
+
+        String entryType = categoryToEntryType(category);
+        LayoutSnapshot snapshot = new LayoutSnapshot(slots.size(), slots, false);
+        String label = getScreenLabel(slots.size(), false);
+        long timestamp = System.currentTimeMillis();
+        long playtime = getCurrentPlaytimeMinutes();
+        String containerTitle = getContainerTitle(false);
+
+        HistoryEntry entry = new HistoryEntry(snapshot, label, timestamp, playtime, containerTitle, entryType);
+
+        int dupIndex = findDuplicate(entry);
+        if (dupIndex >= 0) {
+            InvTweaksConfig.debugLog("COPY", "dedup: replacing existing entry at index %d | label=%s", dupIndex, history.get(dupIndex).label);
+            removeDuplicate(dupIndex);
+        }
+
+        addToHistory(entry);
+        ClipboardStorage.save();
+
+        if (!silent) {
+            InvTweaksOverlay.show("Layout copied", 0xFF55FF55);
+        }
+        InvTweaksConfig.debugLog("COPY", "copied %d slots | category=%s | entryType=%s | label=%s | containerTitle=%s | dedup=%s",
+                slots.size(), category, entryType, label, containerTitle, dupIndex >= 0);
+    }
+
     // ========== PASTE ==========
 
     /**
@@ -561,11 +829,12 @@ public class LayoutClipboard {
         public final boolean typeMismatch;
         public final boolean quantityMaxOnly;
         public final String errorMessage;
+        public final int lockedSlotsSkipped;
 
         private PasteResult(int slotsPlaced, int slotsTotal, boolean cursorWasOccupied,
                             boolean alreadyMatched, boolean noMatchingItems, boolean sizeMismatch,
                             boolean noClipboard, boolean typeMismatch, boolean quantityMaxOnly,
-                            String errorMessage) {
+                            String errorMessage, int lockedSlotsSkipped) {
             this.slotsPlaced = slotsPlaced;
             this.slotsTotal = slotsTotal;
             this.cursorWasOccupied = cursorWasOccupied;
@@ -576,29 +845,36 @@ public class LayoutClipboard {
             this.typeMismatch = typeMismatch;
             this.quantityMaxOnly = quantityMaxOnly;
             this.errorMessage = errorMessage;
+            this.lockedSlotsSkipped = lockedSlotsSkipped;
         }
 
         public static PasteResult success(int placed, int total, boolean cursorOccupied) {
-            return new PasteResult(placed, total, cursorOccupied, false, false, false, false, false, false, null);
+            return new PasteResult(placed, total, cursorOccupied, false, false, false, false, false, false, null, 0);
         }
         public static PasteResult successQuantityMax(int placed, int total, boolean cursorOccupied) {
-            return new PasteResult(placed, total, cursorOccupied, false, false, false, false, false, true, null);
+            return new PasteResult(placed, total, cursorOccupied, false, false, false, false, false, true, null, 0);
         }
         public static PasteResult alreadyMatched() {
-            return new PasteResult(0, 0, false, true, false, false, false, false, false, null);
+            return new PasteResult(0, 0, false, true, false, false, false, false, false, null, 0);
         }
         public static PasteResult noClipboard() {
-            return new PasteResult(0, 0, false, false, false, false, true, false, false, null);
+            return new PasteResult(0, 0, false, false, false, false, true, false, false, null, 0);
         }
         public static PasteResult noMatchingItems() {
-            return new PasteResult(0, 0, false, false, true, false, false, false, false, null);
+            return new PasteResult(0, 0, false, false, true, false, false, false, false, null, 0);
         }
         public static PasteResult sizeMismatch(int clipSize, int containerSize) {
             return new PasteResult(0, 0, false, false, false, true, false, false, false,
-                    "Layout size incompatible");
+                    "Layout size incompatible", 0);
         }
         public static PasteResult typeMismatch(String msg) {
-            return new PasteResult(0, 0, false, false, false, false, false, true, false, msg);
+            return new PasteResult(0, 0, false, false, false, false, false, true, false, msg, 0);
+        }
+
+        public PasteResult withLockedSlotsSkipped(int count) {
+            return new PasteResult(slotsPlaced, slotsTotal, cursorWasOccupied, alreadyMatched,
+                    noMatchingItems, sizeMismatch, noClipboard, typeMismatch, quantityMaxOnly,
+                    errorMessage, count);
         }
     }
 
@@ -607,7 +883,7 @@ public class LayoutClipboard {
      * Uses the active clipboard entry for data.
      */
     public static PasteResult pasteLayout(ScreenHandler handler, boolean isPlayerOnly) {
-        return pasteLayout(handler, isPlayerOnly, null);
+        return pasteLayout(handler, isPlayerOnly, (Map<Integer,SlotData>) null);
     }
 
     /**
@@ -617,6 +893,17 @@ public class LayoutClipboard {
      */
     public static PasteResult pasteLayout(ScreenHandler handler, boolean isPlayerOnly,
                                            Map<Integer, SlotData> overrideData) {
+        return pasteLayout(handler, isPlayerOnly, overrideData, false);
+    }
+
+    /**
+     * Paste a layout with optional even distribution.
+     * @param evenDistribution if true, distribute items evenly across slots of the same type
+     *                         instead of filling each slot to max stack size.
+     */
+    public static PasteResult pasteLayout(ScreenHandler handler, boolean isPlayerOnly,
+                                           Map<Integer, SlotData> overrideData,
+                                           boolean evenDistribution) {
         MinecraftClient mc = MinecraftClient.getInstance();
         ClientPlayerInteractionManager im = mc.interactionManager;
         PlayerEntity player = mc.player;
@@ -782,7 +1069,7 @@ public class LayoutClipboard {
                 }
             }
         }
-        if (alreadyMatches) {
+        if (alreadyMatches && !evenDistribution) {
             // Check if any target slot could receive more items (quantity maximization)
             boolean canTopUp = false;
             for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
@@ -838,19 +1125,59 @@ public class LayoutClipboard {
                 im.clickSlot(handler.syncId, cursorStashSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                 InvTweaksConfig.debugLog("PASTE", "stashed cursor item in slot %d", cursorStashSlot);
                 allAccessibleSlots.remove(cursorStashSlot);
-                allAccessibleSlots.remove(cursorStashSlot);
             } else {
                 InvTweaksConfig.debugLog("PASTE", "cannot stash cursor — no non-target empty slot available");
                 return PasteResult.success(0, targetLayout.size(), true);
             }
         }
 
+        // Even distribution: compute per-slot quantities for small containers
+        Map<Integer, Integer> quantityOverrides = null;
+        if (evenDistribution) {
+            quantityOverrides = calculateEvenDistribution(targetLayout, handler, allAccessibleSlots);
+        }
+
+        // Even distribution pre-pass: trim excess from target slots before the main paste
+        if (evenDistribution && quantityOverrides != null) {
+            for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
+                int slotId = entry.getKey();
+                SlotData desired = entry.getValue();
+                if (desired.item() == null) continue;
+                Integer desiredQty = quantityOverrides.get(slotId);
+                if (desiredQty == null) continue;
+                ItemStack current = handler.slots.get(slotId).getStack();
+                if (current.isEmpty() || current.getItem() != desired.item()) continue;
+                if (desired.components() != null) {
+                    String currentComp = serializeComponents(current);
+                    if (!desired.components().equals(currentComp)) continue;
+                }
+                if (current.getCount() <= desiredQty) continue;
+                // Slot has excess — trim it
+                int excess = current.getCount() - desiredQty;
+                im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                for (int r = 0; r < desiredQty; r++) {
+                    im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
+                }
+                if (!handler.getCursorStack().isEmpty()) {
+                    int dump = findAnyEmptySlot(handler, allAccessibleSlots);
+                    if (dump >= 0) {
+                        im.clickSlot(handler.syncId, dump, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    } else {
+                        im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    }
+                }
+                InvTweaksConfig.debugLog("PASTE", "pre-pass trimmed slot %d: had %d, want %d, removed %d",
+                        slotId, current.getCount(), desiredQty, excess);
+            }
+        }
+
         int matchedSlots = 0;
         Set<Integer> failedSlots = new HashSet<>();
 
-        // Pass 1
+        // Pass 1: when even distribution is active, protect all target slots from being used as sources
+        Set<Integer> pass1Protected = evenDistribution ? new HashSet<>(targetLayout.keySet()) : Collections.emptySet();
         matchedSlots = executePastePass(handler, im, player, targetLayout, allAccessibleSlots,
-                clipboardItemTypes, isPlayerOnly, false, failedSlots, Collections.emptySet());
+                clipboardItemTypes, isPlayerOnly, false, failedSlots, pass1Protected, quantityOverrides);
 
         // Pass 2: retry failed slots (displacement in pass 1 may have freed slots)
         if (!failedSlots.isEmpty()) {
@@ -861,21 +1188,25 @@ public class LayoutClipboard {
             }
             // Protect pass-1 filled slots from being used as sources in pass 2
             Set<Integer> pass1FilledSlots = new HashSet<>();
-            for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
-                int slotId = entry.getKey();
-                if (!failedSlots.contains(slotId)) {
-                    SlotData desired = entry.getValue();
-                    if (desired.item() != null) {
-                        ItemStack current = handler.slots.get(slotId).getStack();
-                        if (!current.isEmpty() && current.getItem() == desired.item()) {
-                            pass1FilledSlots.add(slotId);
+            if (evenDistribution) {
+                pass1FilledSlots.addAll(targetLayout.keySet());
+            } else {
+                for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
+                    int slotId = entry.getKey();
+                    if (!failedSlots.contains(slotId)) {
+                        SlotData desired = entry.getValue();
+                        if (desired.item() != null) {
+                            ItemStack current = handler.slots.get(slotId).getStack();
+                            if (!current.isEmpty() && current.getItem() == desired.item()) {
+                                pass1FilledSlots.add(slotId);
+                            }
                         }
                     }
                 }
             }
             Set<Integer> retryFailed = new HashSet<>();
             int pass2Matched = executePastePass(handler, im, player, retryLayout, allAccessibleSlots,
-                    clipboardItemTypes, isPlayerOnly, false, retryFailed, pass1FilledSlots);
+                    clipboardItemTypes, isPlayerOnly, false, retryFailed, pass1FilledSlots, quantityOverrides);
             matchedSlots += pass2Matched;
         }
 
@@ -911,7 +1242,8 @@ public class LayoutClipboard {
                                          PlayerEntity player, Map<Integer, SlotData> targetLayout,
                                          Set<Integer> allAccessibleSlots, Set<Item> clipboardItemTypes,
                                          boolean isPlayerOnly, boolean cursorOccupied,
-                                         Set<Integer> failedSlots, Set<Integer> protectedSlots) {
+                                         Set<Integer> failedSlots, Set<Integer> protectedSlots,
+                                         Map<Integer, Integer> quantityOverrides) {
         int matchedSlots = 0;
 
         for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
@@ -965,6 +1297,9 @@ public class LayoutClipboard {
             }
 
             int maxStack = new ItemStack(desired.item()).getMaxCount();
+            int desiredQuantity = (quantityOverrides != null && quantityOverrides.containsKey(targetSlotId))
+                    ? Math.min(quantityOverrides.get(targetSlotId), maxStack)
+                    : maxStack;
 
             boolean typeMatches = !currentStack.isEmpty() && currentStack.getItem() == desired.item();
             boolean componentMatches = true;
@@ -973,13 +1308,13 @@ public class LayoutClipboard {
                 componentMatches = desired.components().equals(currentComponents);
             }
             if (typeMatches && componentMatches) {
-                if (currentStack.getCount() >= maxStack) {
+                if (currentStack.getCount() >= desiredQuantity) {
                     matchedSlots++;
                     continue;
                 }
                 if (!cursorOccupied) {
                     addMore(handler, im, player, targetSlotId, desired.item(),
-                            desired.components(), maxStack - currentStack.getCount(), allAccessibleSlots, targetLayout, isPlayerOnly, protectedSlots);
+                            desired.components(), desiredQuantity - currentStack.getCount(), allAccessibleSlots, targetLayout, isPlayerOnly, protectedSlots);
                 }
                 // When cursor is occupied, we can't do addMore (it uses PICKUP), but the type matches, so count it
                 matchedSlots++;
@@ -988,10 +1323,6 @@ public class LayoutClipboard {
 
             // Wrong item or empty — need to place the desired item here
             if (!currentStack.isEmpty()) {
-                if (!clipboardItemTypes.contains(currentStack.getItem())) {
-                    InvTweaksConfig.debugLog("PASTE", "skipping non-layout item at target slot %d (%s)", targetSlotId, currentStack.getItem());
-                    continue;
-                }
                 boolean moved;
                 if (cursorOccupied) {
                     moved = moveItemOutQuickMove(handler, im, player, targetSlotId);
@@ -1010,7 +1341,7 @@ public class LayoutClipboard {
                 placed = sourceItemQuickMove(handler, im, player, targetSlotId, desired.item(),
                         desired.components(), allAccessibleSlots, targetLayout);
             } else {
-                placed = sourceItem(handler, im, player, targetSlotId, desired.item(), maxStack,
+                placed = sourceItem(handler, im, player, targetSlotId, desired.item(), desiredQuantity,
                         desired.components(), allAccessibleSlots, targetLayout, isPlayerOnly, protectedSlots);
             }
             if (placed) {
@@ -1059,6 +1390,61 @@ public class LayoutClipboard {
 
         InvTweaksOverlay.show("Layout cut", 0xFF55FF55);
         InvTweaksConfig.debugLog("CUT", "complete | moved=%d stacks", moved);
+    }
+
+    /**
+     * Cut with category awareness. Copies the layout, then extracts items.
+     */
+    public static void cutLayout(ScreenHandler handler, boolean isPlayerOnly,
+                                  ContainerClassifier.ContainerCategory category) {
+        if (isPlayerOnly || category == null) {
+            cutLayout(handler, isPlayerOnly);
+            return;
+        }
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+        ClientPlayerInteractionManager im = mc.interactionManager;
+        PlayerEntity player = mc.player;
+        if (im == null || player == null) return;
+
+        // Copy first (silent)
+        copyLayout(handler, isPlayerOnly, true, category);
+
+        // Move items to player inventory
+        int moved = 0;
+        switch (category) {
+            case CRAFTING_TABLE -> {
+                // Only extract from input slots 1-9 (skip output slot 0)
+                for (int i = 1; i <= 9; i++) {
+                    if (i >= handler.slots.size()) break;
+                    if (handler.slots.get(i).getStack().isEmpty()) continue;
+                    im.clickSlot(handler.syncId, i, 0, SlotActionType.QUICK_MOVE, player);
+                    moved++;
+                }
+            }
+            case FURNACE -> {
+                // Only extract from input (slot 0) and fuel (slot 1), skip output (slot 2)
+                for (int i = 0; i <= 1; i++) {
+                    if (i >= handler.slots.size()) break;
+                    if (handler.slots.get(i).getStack().isEmpty()) continue;
+                    im.clickSlot(handler.syncId, i, 0, SlotActionType.QUICK_MOVE, player);
+                    moved++;
+                }
+            }
+            default -> {
+                // All container slots (same as original)
+                for (int i = 0; i < handler.slots.size(); i++) {
+                    Slot slot = handler.slots.get(i);
+                    if (slot.inventory instanceof PlayerInventory) continue;
+                    if (slot.getStack().isEmpty()) continue;
+                    im.clickSlot(handler.syncId, i, 0, SlotActionType.QUICK_MOVE, player);
+                    moved++;
+                }
+            }
+        }
+
+        InvTweaksOverlay.show("Layout cut", 0xFF55FF55);
+        InvTweaksConfig.debugLog("CUT", "complete | moved=%d stacks | category=%s", moved, category);
     }
 
     // ========== DEATH AUTO-COPY ==========
@@ -1223,6 +1609,191 @@ public class LayoutClipboard {
         return false;
     }
 
+    /**
+     * Paste with category awareness. Handles cross-type guards and container-specific slot mapping.
+     */
+    public static PasteResult pasteLayout(ScreenHandler handler, boolean isPlayerOnly,
+                                           ContainerClassifier.ContainerCategory category) {
+        if (isPlayerOnly || category == null) {
+            return pasteLayout(handler, isPlayerOnly);
+        }
+
+        // Get the active entry for this category
+        String expectedType = categoryToEntryType(category);
+        int activeIndex = getActiveIndexForCategory(category);
+
+        if (activeIndex < 0 || activeIndex >= history.size()) {
+            // Cross-type guard messages
+            String msg = switch (category) {
+                case GRID9, CRAFTER, CRAFTING_TABLE -> "No grid layout copied";
+                case HOPPER -> "No hopper layout copied";
+                case FURNACE -> "No furnace layout copied";
+                default -> "No layout copied";
+            };
+            return PasteResult.typeMismatch(msg);
+        }
+
+        HistoryEntry activeEntry = history.get(activeIndex);
+
+        // Verify entry type matches
+        if (!expectedType.equals(activeEntry.entryType)) {
+            return PasteResult.typeMismatch("Layout type incompatible");
+        }
+
+        Map<Integer, SlotData> clipboardSlots = activeEntry.snapshot.slots;
+
+        // Category-specific paste logic
+        switch (category) {
+            case CRAFTER -> {
+                // Phase 1: Match lock state before placing items
+                if (handler instanceof net.minecraft.screen.CrafterScreenHandler crafterHandler) {
+                    MinecraftClient mc = MinecraftClient.getInstance();
+                    ClientPlayerInteractionManager im = mc.interactionManager;
+                    PlayerEntity player = mc.player;
+                    if (im != null && player != null) {
+                        for (int i = 0; i < 9; i++) {
+                            SlotData clipSlot = clipboardSlots.get(i);
+                            boolean clipLocked = SlotData.isLocked(clipSlot);
+                            boolean targetLocked = false;
+                            try {
+                                targetLocked = crafterHandler.isSlotDisabled(i);
+                            } catch (Exception e) {
+                                InvTweaksConfig.debugLog("CRAFTER", "isSlotDisabled check failed for slot %d: %s", i, e.getMessage());
+                            }
+
+                            if (clipLocked != targetLocked) {
+                                boolean newEnabled = !clipLocked;
+                                crafterHandler.setSlotEnabled(i, newEnabled);
+                                im.slotChangedState(i, handler.syncId, newEnabled);
+                                InvTweaksConfig.debugLog("CRAFTER", "toggled lock state on slot %d (was %s, want %s)", i, targetLocked, clipLocked);
+                            }
+                        }
+                    }
+                }
+                // Phase 2: Build override data excluding locked slots
+                Map<Integer, SlotData> pasteData = new LinkedHashMap<>();
+                for (Map.Entry<Integer, SlotData> e : clipboardSlots.entrySet()) {
+                    if (!SlotData.isLocked(e.getValue())) {
+                        pasteData.put(e.getKey(), e.getValue());
+                    }
+                }
+                return pasteLayout(handler, false, pasteData, true);
+            }
+            case CRAFTING_TABLE -> {
+                // Remap clipboard keys 0-8 to handler slots 1-9 (skip output slot 0)
+                Map<Integer, SlotData> remapped = new LinkedHashMap<>();
+                int lockedCount = 0;
+                for (Map.Entry<Integer, SlotData> e : clipboardSlots.entrySet()) {
+                    if (SlotData.isLocked(e.getValue())) {
+                        lockedCount++;
+                        continue;
+                    }
+                    remapped.put(e.getKey() + 1, e.getValue()); // key 0 -> handler slot 1, etc.
+                }
+                PasteResult result = pasteLayout(handler, false, remapped, true);
+                return lockedCount > 0 ? result.withLockedSlotsSkipped(lockedCount) : result;
+            }
+            case FURNACE -> {
+                // Slots 0-1 only (input + fuel), no remapping needed
+                Map<Integer, SlotData> filtered = new LinkedHashMap<>();
+                for (Map.Entry<Integer, SlotData> e : clipboardSlots.entrySet()) {
+                    if (e.getKey() <= 1) {
+                        filtered.put(e.getKey(), e.getValue());
+                    }
+                }
+                return pasteLayout(handler, false, filtered, true);
+            }
+            default -> {
+                // GRID9, HOPPER, STANDARD: Filter out LOCKED entries, then normal paste
+                Map<Integer, SlotData> filtered = new LinkedHashMap<>();
+                int lockedCount = 0;
+                for (Map.Entry<Integer, SlotData> e : clipboardSlots.entrySet()) {
+                    if (SlotData.isLocked(e.getValue())) {
+                        lockedCount++;
+                    } else {
+                        filtered.put(e.getKey(), e.getValue());
+                    }
+                }
+                PasteResult result = pasteLayout(handler, false, filtered, true);
+                return lockedCount > 0 ? result.withLockedSlotsSkipped(lockedCount) : result;
+            }
+        }
+    }
+
+    // ========== EVEN DISTRIBUTION (small containers) ==========
+
+    /**
+     * Calculate even distribution quantities for small containers.
+     * Groups target slots by item type + component fingerprint, counts available items,
+     * and distributes evenly across slots wanting the same type.
+     *
+     * @param targetLayout the paste target layout (handler slot ID → SlotData)
+     * @param handler the screen handler to scan for available items
+     * @param allAccessibleSlots all slots that can be used as sources
+     * @return map of handler slot ID → desired quantity
+     */
+    private static Map<Integer, Integer> calculateEvenDistribution(
+            Map<Integer, SlotData> targetLayout, ScreenHandler handler,
+            Set<Integer> allAccessibleSlots) {
+
+        // Group target slots by item type key (item + components)
+        // key = "item_id|components", value = list of handler slot IDs wanting that type
+        Map<String, List<Integer>> slotsByType = new LinkedHashMap<>();
+        Map<String, Item> itemByType = new HashMap<>();
+        Map<String, String> componentsByType = new HashMap<>();
+
+        for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
+            SlotData desired = entry.getValue();
+            if (desired.item() == null) continue;
+            String typeKey = desired.item().toString() + "|" + (desired.components() != null ? desired.components() : "");
+            slotsByType.computeIfAbsent(typeKey, k -> new ArrayList<>()).add(entry.getKey());
+            itemByType.put(typeKey, desired.item());
+            componentsByType.put(typeKey, desired.components());
+        }
+
+        // Count available items per type from ALL accessible slots (including target slots)
+        // Target slots with existing items contribute to the total pool for redistribution
+        Map<String, Integer> availableByType = new HashMap<>();
+
+        for (String typeKey : slotsByType.keySet()) {
+            Item itemType = itemByType.get(typeKey);
+            String desiredComponents = componentsByType.get(typeKey);
+            int available = 0;
+            for (int slotId : allAccessibleSlots) {
+                ItemStack stack = handler.slots.get(slotId).getStack();
+                if (stack.isEmpty() || stack.getItem() != itemType) continue;
+                if (desiredComponents != null) {
+                    String srcComponents = serializeComponents(stack);
+                    if (!desiredComponents.equals(srcComponents)) continue;
+                }
+                available += stack.getCount();
+            }
+            availableByType.put(typeKey, available);
+        }
+
+        // Distribute evenly
+        Map<Integer, Integer> quantities = new HashMap<>();
+        for (Map.Entry<String, List<Integer>> entry : slotsByType.entrySet()) {
+            String typeKey = entry.getKey();
+            List<Integer> slots = entry.getValue();
+            int available = availableByType.getOrDefault(typeKey, 0);
+            int numSlots = slots.size();
+            int maxStack = new ItemStack(itemByType.get(typeKey)).getMaxCount();
+
+            int base = Math.min(available / numSlots, maxStack);
+            int remainder = available - base * numSlots;
+            if (base == maxStack) remainder = 0;
+
+            for (int i = 0; i < numSlots; i++) {
+                int qty = base + (i < remainder ? 1 : 0);
+                quantities.put(slots.get(i), qty);
+                InvTweaksConfig.debugLog("EVEN-DIST", "slot %d -> %d items (type=%s)", slots.get(i), qty, typeKey);
+            }
+        }
+
+        return quantities;
+    }
+
     // ========== PASTE HELPERS ==========
 
     private static boolean moveItemOut(ScreenHandler handler, ClientPlayerInteractionManager im,
@@ -1378,9 +1949,10 @@ public class LayoutClipboard {
 
             int toTake = Math.min(remaining, canTake);
 
+            int srcCount = srcStack.getCount();
             InvTweaksConfig.debugLog("PASTE", "addMore slot=%d | need=%d | src=%d | taking=%d", targetSlotId, remaining, srcSlot, toTake);
 
-            if (toTake == srcStack.getCount()) {
+            if (toTake == srcCount) {
                 im.clickSlot(handler.syncId, srcSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                 im.clickSlot(handler.syncId, targetSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                 if (!handler.getCursorStack().isEmpty()) {
@@ -1391,7 +1963,7 @@ public class LayoutClipboard {
                 }
             } else {
                 im.clickSlot(handler.syncId, srcSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
-                int putBack = srcStack.getCount() - toTake;
+                int putBack = srcCount - toTake;
                 for (int i = 0; i < putBack; i++) {
                     im.clickSlot(handler.syncId, srcSlot, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
                 }
@@ -1466,7 +2038,8 @@ public class LayoutClipboard {
             InvTweaksConfig.debugLog("PASTE", "sourceItem slot=%d | item=%s | need=%d | src=%d | taking=%d",
                     targetSlotId, itemType, remaining, srcSlot, toTake);
 
-            if (toTake == srcStack.getCount()) {
+            int srcCount = srcStack.getCount();
+            if (toTake == srcCount) {
                 im.clickSlot(handler.syncId, srcSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                 im.clickSlot(handler.syncId, targetSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                 if (!handler.getCursorStack().isEmpty()) {
@@ -1475,7 +2048,7 @@ public class LayoutClipboard {
                 remaining -= toTake;
             } else {
                 im.clickSlot(handler.syncId, srcSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
-                int putBack = srcStack.getCount() - toTake;
+                int putBack = srcCount - toTake;
                 for (int i = 0; i < putBack; i++) {
                     im.clickSlot(handler.syncId, srcSlot, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
                 }
@@ -1691,6 +2264,23 @@ public class LayoutClipboard {
         int activeIndex = isPlayerOnly ? activePlayerIndex : activeContainerIndex;
         if (activeIndex < 0 || activeIndex >= history.size()) return null;
         return history.get(activeIndex);
+    }
+
+    /**
+     * Get the active clipboard entry for the given context, with category awareness.
+     */
+    public static HistoryEntry getActiveEntry(boolean isPlayerOnly, ContainerClassifier.ContainerCategory category) {
+        if (isPlayerOnly) {
+            if (activePlayerIndex < 0 || activePlayerIndex >= history.size()) return null;
+            return history.get(activePlayerIndex);
+        }
+        if (category != null) {
+            int activeIndex = getActiveIndexForCategory(category);
+            if (activeIndex < 0 || activeIndex >= history.size()) return null;
+            return history.get(activeIndex);
+        }
+        if (activeContainerIndex < 0 || activeContainerIndex >= history.size()) return null;
+        return history.get(activeContainerIndex);
     }
 
     /**

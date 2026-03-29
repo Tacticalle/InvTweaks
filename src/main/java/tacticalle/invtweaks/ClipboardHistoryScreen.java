@@ -47,6 +47,7 @@ public class ClipboardHistoryScreen extends Screen {
     private static final int SLOT_BORDER = 0xFF8B8B8B;
     private static final int SLOT_EMPTY_BG = 0xFF4A4A4A;
     private static final int SLOT_EMPTY_BORDER = 0xFF2A2A2A;
+    private static final int SLOT_LOCKED_BG = 0xFF8B0000; // Dark red for locked crafter slots
     private static final int PANEL_BG = 0xFF2B2B2B;
     private static final int PANEL_BORDER = 0xFF555555;
 
@@ -187,6 +188,9 @@ public class ClipboardHistoryScreen extends Screen {
         int activeContainer = LayoutClipboard.getActiveContainerIndex();
         int activePlayer = LayoutClipboard.getActivePlayerIndex();
         int activeBundle = LayoutClipboard.getActiveBundleIndex();
+        int activeGrid9 = LayoutClipboard.getActiveGrid9Index();
+        int activeHopper5 = LayoutClipboard.getActiveHopper5Index();
+        int activeFurnace2 = LayoutClipboard.getActiveFurnace2Index();
 
         for (int i = 0; i < history.size(); i++) {
             LayoutClipboard.HistoryEntry entry = history.get(i);
@@ -195,6 +199,12 @@ public class ClipboardHistoryScreen extends Screen {
                 isActive = (i == activeBundle);
             } else if (entry.snapshot.isPlayerInventory) {
                 isActive = (i == activePlayer);
+            } else if (LayoutClipboard.TYPE_GRID9.equals(entry.entryType)) {
+                isActive = (i == activeGrid9);
+            } else if (LayoutClipboard.TYPE_HOPPER5.equals(entry.entryType)) {
+                isActive = (i == activeHopper5);
+            } else if (LayoutClipboard.TYPE_FURNACE2.equals(entry.entryType)) {
+                isActive = (i == activeFurnace2);
             } else {
                 isActive = (i == activeContainer);
             }
@@ -366,6 +376,93 @@ public class ClipboardHistoryScreen extends Screen {
             }
 
             gridBottomY = gridY + gridHeight;
+        } else if (LayoutClipboard.TYPE_GRID9.equals(entry.entryType)) {
+            // Grid9 layout: 3 columns, 3 rows
+            int cols = 3;
+            int rows = 3;
+
+            int slotSize = Math.min(availableWidth / cols, availableHeight / rows);
+            slotSize = Math.max(slotSize, 8);
+            slotSize = Math.min(slotSize, SLOT_SIZE);
+
+            int gridWidth = cols * slotSize;
+            int gridHeight = rows * slotSize;
+            int gridX = rightPanelX + (rightPanelWidth - gridWidth) / 2;
+
+            // Draw container background
+            context.fill(gridX - 4, gridY - 4, gridX + gridWidth + 4, gridY + gridHeight + 4, PANEL_BORDER);
+            context.fill(gridX - 3, gridY - 3, gridX + gridWidth + 3, gridY + gridHeight + 3, 0xFFC6C6C6);
+
+            for (int i = 0; i < 9; i++) {
+                int col = i % cols;
+                int row = i / cols;
+                int sx = gridX + col * slotSize;
+                int sy = gridY + row * slotSize;
+                LayoutClipboard.SlotData sd = snapshot.slots.get(i);
+                if (LayoutClipboard.SlotData.isLocked(sd)) {
+                    // Locked slot: dark red background, no item
+                    context.fill(sx, sy, sx + slotSize, sy + slotSize, SLOT_EMPTY_BORDER);
+                    context.fill(sx + 1, sy + 1, sx + slotSize - 1, sy + slotSize - 1, SLOT_LOCKED_BG);
+                } else {
+                    renderPreviewSlotScaled(context, sd, sx, sy, slotSize, previewSlots);
+                }
+            }
+
+            gridBottomY = gridY + gridHeight;
+        } else if (LayoutClipboard.TYPE_HOPPER5.equals(entry.entryType)) {
+            // Hopper5 layout: 5 columns, 1 row
+            int cols = 5;
+            int rows = 1;
+
+            int slotSize = Math.min(availableWidth / cols, availableHeight / rows);
+            slotSize = Math.max(slotSize, 8);
+            slotSize = Math.min(slotSize, SLOT_SIZE);
+
+            int gridWidth = cols * slotSize;
+            int gridHeight = rows * slotSize;
+            int gridX = rightPanelX + (rightPanelWidth - gridWidth) / 2;
+
+            context.fill(gridX - 4, gridY - 4, gridX + gridWidth + 4, gridY + gridHeight + 4, PANEL_BORDER);
+            context.fill(gridX - 3, gridY - 3, gridX + gridWidth + 3, gridY + gridHeight + 3, 0xFFC6C6C6);
+
+            List<Integer> sortedSlotIds = new java.util.ArrayList<>(snapshot.slots.keySet());
+            java.util.Collections.sort(sortedSlotIds);
+
+            for (int i = 0; i < sortedSlotIds.size() && i < 5; i++) {
+                int sx = gridX + i * slotSize;
+                int sy = gridY;
+                int slotId = sortedSlotIds.get(i);
+                renderPreviewSlotScaled(context, snapshot.slots.get(slotId), sx, sy, slotSize, previewSlots);
+            }
+
+            gridBottomY = gridY + gridHeight;
+        } else if (LayoutClipboard.TYPE_FURNACE2.equals(entry.entryType)) {
+            // Furnace2 layout: 2 columns, 1 row (input + fuel)
+            int cols = 2;
+            int rows = 1;
+
+            int slotSize = Math.min(availableWidth / cols, availableHeight / rows);
+            slotSize = Math.max(slotSize, 8);
+            slotSize = Math.min(slotSize, SLOT_SIZE);
+
+            int gridWidth = cols * slotSize;
+            int gridHeight = rows * slotSize;
+            int gridX = rightPanelX + (rightPanelWidth - gridWidth) / 2;
+
+            context.fill(gridX - 4, gridY - 4, gridX + gridWidth + 4, gridY + gridHeight + 4, PANEL_BORDER);
+            context.fill(gridX - 3, gridY - 3, gridX + gridWidth + 3, gridY + gridHeight + 3, 0xFFC6C6C6);
+
+            List<Integer> sortedSlotIds = new java.util.ArrayList<>(snapshot.slots.keySet());
+            java.util.Collections.sort(sortedSlotIds);
+
+            for (int i = 0; i < sortedSlotIds.size() && i < 2; i++) {
+                int sx = gridX + i * slotSize;
+                int sy = gridY;
+                int slotId = sortedSlotIds.get(i);
+                renderPreviewSlotScaled(context, snapshot.slots.get(slotId), sx, sy, slotSize, previewSlots);
+            }
+
+            gridBottomY = gridY + gridHeight;
         } else {
             // Container: determine grid dimensions from slot count
             int slotCount = snapshot.slotCount;
@@ -427,6 +524,17 @@ public class ClipboardHistoryScreen extends Screen {
         String summary;
         if (entry.isBundle()) {
             summary = nonEmptyCount + " items";
+        } else if (LayoutClipboard.TYPE_GRID9.equals(entry.entryType)) {
+            // For grid9, count locked slots as "taken"
+            int lockedCount = 0;
+            for (LayoutClipboard.SlotData sd : snapshot.slots.values()) {
+                if (LayoutClipboard.SlotData.isLocked(sd)) lockedCount++;
+            }
+            summary = (nonEmptyCount + lockedCount) + "/9 slots taken";
+        } else if (LayoutClipboard.TYPE_HOPPER5.equals(entry.entryType)) {
+            summary = nonEmptyCount + "/5 slots taken";
+        } else if (LayoutClipboard.TYPE_FURNACE2.equals(entry.entryType)) {
+            summary = nonEmptyCount + "/2 slots taken";
         } else {
             summary = nonEmptyCount + "/" + totalSlots + " slots taken";
         }

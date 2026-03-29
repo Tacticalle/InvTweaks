@@ -33,6 +33,9 @@ public class ClipboardStorage {
             root.addProperty("activeContainerIndex", LayoutClipboard.getActiveContainerIndex());
             root.addProperty("activePlayerIndex", LayoutClipboard.getActivePlayerIndex());
             root.addProperty("activeBundleIndex", LayoutClipboard.getActiveBundleIndex());
+            root.addProperty("activeGrid9Index", LayoutClipboard.getActiveGrid9Index());
+            root.addProperty("activeHopper5Index", LayoutClipboard.getActiveHopper5Index());
+            root.addProperty("activeFurnace2Index", LayoutClipboard.getActiveFurnace2Index());
 
             JsonArray historyArray = new JsonArray();
             for (LayoutClipboard.HistoryEntry entry : LayoutClipboard.getHistory()) {
@@ -55,7 +58,11 @@ public class ClipboardStorage {
                 JsonObject slotsObj = new JsonObject();
                 for (Map.Entry<Integer, LayoutClipboard.SlotData> slotEntry : entry.snapshot.slots.entrySet()) {
                     LayoutClipboard.SlotData sd = slotEntry.getValue();
-                    if (sd.item() == null) {
+                    if (LayoutClipboard.SlotData.isLocked(sd)) {
+                        JsonObject lockedObj = new JsonObject();
+                        lockedObj.addProperty("locked", true);
+                        slotsObj.add(String.valueOf(slotEntry.getKey()), lockedObj);
+                    } else if (sd.item() == null) {
                         slotsObj.add(String.valueOf(slotEntry.getKey()), JsonNull.INSTANCE);
                     } else {
                         JsonObject slotObj = new JsonObject();
@@ -102,6 +109,9 @@ public class ClipboardStorage {
             int activeContainerIndex = root.has("activeContainerIndex") ? root.get("activeContainerIndex").getAsInt() : -1;
             int activePlayerIndex = root.has("activePlayerIndex") ? root.get("activePlayerIndex").getAsInt() : -1;
             int activeBundleIndex = root.has("activeBundleIndex") ? root.get("activeBundleIndex").getAsInt() : 0;
+            int activeGrid9Index = root.has("activeGrid9Index") ? root.get("activeGrid9Index").getAsInt() : -1;
+            int activeHopper5Index = root.has("activeHopper5Index") ? root.get("activeHopper5Index").getAsInt() : -1;
+            int activeFurnace2Index = root.has("activeFurnace2Index") ? root.get("activeFurnace2Index").getAsInt() : -1;
 
             List<LayoutClipboard.HistoryEntry> entries = new ArrayList<>();
             JsonArray historyArray = root.getAsJsonArray("history");
@@ -122,6 +132,9 @@ public class ClipboardStorage {
                             JsonElement slotElem = slotEntry.getValue();
                             if (slotElem.isJsonNull()) {
                                 slots.put(slotIndex, new LayoutClipboard.SlotData(null, 0, null));
+                            } else if (slotElem.isJsonObject() && slotElem.getAsJsonObject().has("locked")
+                                       && slotElem.getAsJsonObject().get("locked").getAsBoolean()) {
+                                slots.put(slotIndex, LayoutClipboard.SlotData.LOCKED);
                             } else {
                                 JsonObject slotObj = slotElem.getAsJsonObject();
                                 String itemId = slotObj.get("item").getAsString();
@@ -153,7 +166,7 @@ public class ClipboardStorage {
                 }
             }
 
-            LayoutClipboard.loadFromStorage(entries, activeContainerIndex, activePlayerIndex, activeBundleIndex);
+            LayoutClipboard.loadFromStorage(entries, activeContainerIndex, activePlayerIndex, activeBundleIndex, activeGrid9Index, activeHopper5Index, activeFurnace2Index);
             LOGGER.info("InvTweaks: Loaded {} clipboard history entries from disk", entries.size());
         } catch (Exception e) {
             LOGGER.error("InvTweaks: Failed to load clipboard history", e);
