@@ -8,6 +8,7 @@ import net.minecraft.screen.CraftingScreenHandler;
 import net.minecraft.screen.HopperScreenHandler;
 import net.minecraft.screen.FurnaceScreenHandler;
 import net.minecraft.screen.BlastFurnaceScreenHandler;
+import net.minecraft.screen.ShulkerBoxScreenHandler;
 import net.minecraft.screen.SmokerScreenHandler;
 
 /**
@@ -40,6 +41,9 @@ public class ContainerClassifier {
         }
 
         // Check in order of most common first
+        if (handler instanceof ShulkerBoxScreenHandler) {
+            return ContainerCategory.STANDARD;
+        }
         if (handler instanceof GenericContainerScreenHandler) {
             return ContainerCategory.STANDARD;
         }

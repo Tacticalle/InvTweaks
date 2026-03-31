@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.10.0] - 2026-03-30
+
+### Visual Overhaul
+- **Vanilla-Style Slot Rendering** — Preview grids in the clipboard history browser now use vanilla Minecraft slot sprites (`drawGuiTexture`) instead of simple colored fills. Every slot in every preview type (containers, player inventory, bundles, crafters, hoppers, furnaces) renders with the authentic beveled-border slot appearance.
+- **Native-Scale Item Rendering** — Items in preview grids now render at their native 16×16 pixel size instead of being scaled down with the grid. Stack count numbers, enchantment glint, and durability bars are all crisp and readable. A `PREVIEW_SCALE` constant controls the slot frame size (default 1.0 for full-size vanilla slots; set to 0.6 for a compact view where items overflow their smaller slot frames).
+- **Player Inventory Layout Matches Vanilla** — Player inventory clipboard entries now display with a layout matching the real vanilla inventory screen: armor column on the left (with vanilla empty-slot placeholder sprites for helmet, chestplate, leggings, boots), offhand below armor, crafting area (output + 2×2 grid) in the top-right, main inventory 3×9 grid, and hotbar separated below. Crafting slots render as always-empty vanilla slots for visual accuracy.
+- **Crafter Locked Slots** — Locked crafter slots in grid9 previews now use the vanilla disabled-slot sprite overlay instead of the old dark red fill.
+- **Uniform Empty Slots** — Empty slots render as standard vanilla slot sprites with nothing inside. No more alternating dark/light color fills between empty and occupied slots.
+
 ## [1.9.1] - 2026-03-30
 
 ### Features
