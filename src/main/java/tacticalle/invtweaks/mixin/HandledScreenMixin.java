@@ -144,7 +144,7 @@ public abstract class HandledScreenMixin {
         }
 
         // Hotbar Button Modifiers: modifier + number key (SWAP action) in GUI
-        if (actionType == SlotActionType.SWAP && config.enableHotbarModifiers) {
+        if (actionType == SlotActionType.SWAP) {
             String hotbarMode = config.getActiveMode("hotbarModifiers");
             if (hotbarMode != null) {
                 ItemStack sourceStack = slot.getStack();

@@ -738,39 +738,11 @@ public class LayoutClipboard {
     }
 
     /**
-     * Prune expired entries based on playtime config.
+     * Prune expired entries. Expiry has been removed — this method is now a no-op.
+     * Kept for backwards compatibility with callers.
      */
     public static void pruneExpired() {
-        InvTweaksConfig config = InvTweaksConfig.get();
-        if (config.clipboardExpiryPlaytimeHours <= 0) return;
-
-        long currentPlaytime = getCurrentPlaytimeMinutes();
-        long expiryMinutes = config.clipboardExpiryPlaytimeHours * 60L;
-
-        Iterator<HistoryEntry> it = history.iterator();
-        int index = 0;
-        while (it.hasNext()) {
-            HistoryEntry entry = it.next();
-            if ((currentPlaytime - entry.playtimeMinutes) > expiryMinutes) {
-                it.remove();
-                // Adjust active indices
-                if (activeContainerIndex == index) activeContainerIndex = -1;
-                else if (activeContainerIndex > index) activeContainerIndex--;
-                if (activePlayerIndex == index) activePlayerIndex = -1;
-                else if (activePlayerIndex > index) activePlayerIndex--;
-                if (activeBundleIndex == index) activeBundleIndex = -1;
-                else if (activeBundleIndex > index) activeBundleIndex--;
-                if (activeGrid9Index == index) activeGrid9Index = -1;
-                else if (activeGrid9Index > index) activeGrid9Index--;
-                if (activeHopper5Index == index) activeHopper5Index = -1;
-                else if (activeHopper5Index > index) activeHopper5Index--;
-                if (activeFurnace2Index == index) activeFurnace2Index = -1;
-                else if (activeFurnace2Index > index) activeFurnace2Index--;
-                // Don't increment index since we removed
-            } else {
-                index++;
-            }
-        }
+        // Expiry logic removed in Batch 16a.1. Max history count is the only limit.
     }
 
     /**

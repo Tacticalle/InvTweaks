@@ -3,6 +3,7 @@ package tacticalle.invtweaks;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class InvTweaksConfig {
     private static final Logger LOGGER = LoggerFactory.getLogger("invtweaks");
@@ -18,11 +21,25 @@ public class InvTweaksConfig {
 
     private static InvTweaksConfig INSTANCE;
 
-    // Global modifier key GLFW codes (defaults)
-    // "All But 1" key: action takes/moves all but 1 (default: Left Ctrl)
-    public int allBut1Key = GLFW.GLFW_KEY_LEFT_CONTROL;
-    // "Only 1" key: action takes/moves exactly 1 (default: Left Alt)
-    public int only1Key = GLFW.GLFW_KEY_LEFT_ALT;
+    /**
+     * Check if the current OS is macOS.
+     */
+    private static boolean isMacOS() {
+        return Util.getOperatingSystem() == Util.OperatingSystem.OSX;
+    }
+
+    // Global modifier key GLFW codes (OS-specific defaults)
+    // Mac: Cmd (L.Super), Windows/Linux: L.Alt
+    public int allBut1Key = isMacOS() ? GLFW.GLFW_KEY_LEFT_SUPER : GLFW.GLFW_KEY_LEFT_ALT;
+    // All platforms: L.Ctrl
+    public int only1Key = GLFW.GLFW_KEY_LEFT_CONTROL;
+    // Mac: L.Alt/Option, Windows/Linux: R.Alt
+    public int miscModifierKey = isMacOS() ? GLFW.GLFW_KEY_LEFT_ALT : GLFW.GLFW_KEY_RIGHT_ALT;
+
+    // Bundle modifier keys (shared pair for all bundle operations)
+    // -1 = inherit from allBut1Key / only1Key
+    public int bundleAllBut1Key = -1;
+    public int bundleOnly1Key = -1;
 
     // Feature toggles
     public boolean enableClickPickup = true;
@@ -31,12 +48,12 @@ public class InvTweaksConfig {
     public boolean enableBundleInsertCursorBundle = true;
     public boolean enableBundleInsertCursorItems = true;
     public boolean enableThrowHalf = true;
-    // Throwing modifier keys
-    public int throwAllBut1Key = GLFW.GLFW_KEY_LEFT_CONTROL;
-    public int throwHalfKey = GLFW.GLFW_KEY_LEFT_ALT;
-    public int fillExistingKey = GLFW.GLFW_KEY_LEFT_ALT;
-    public int scrollLeave1Key = GLFW.GLFW_KEY_LEFT_CONTROL;
-    public boolean enableHotbarModifiers = true;
+    public boolean enableThrowAllBut1 = true;
+    // Single-key tweak overrides (-1 = inherit from parent global)
+    public int throwAllBut1Key = -1;
+    public int throwHalfKey = -1;
+    public int fillExistingKey = -1;
+    public int scrollLeave1Key = -1;
     public boolean enableFillExisting = true;
     // Copy/paste layout
     public boolean enableCopyPaste = true;
@@ -61,8 +78,10 @@ public class InvTweaksConfig {
     public boolean showOverlayMessages = true;
 
     // Clipboard history
-    public int clipboardMaxHistory = 50;              // max entries to keep (range 5-200)
-    public int clipboardExpiryPlaytimeHours = 0;      // 0 = never expire, otherwise hours of in-game playtime
+    public int clipboardMaxHistory = 50;
+
+    // Open config key (default: K)
+    public int openConfigKey = GLFW.GLFW_KEY_K;
 
     // Clipboard keybinds (-1 = legacy defaults)
     public int clipboardHistoryKey = -1;
@@ -77,11 +96,40 @@ public class InvTweaksConfig {
     // Debug logging
     public boolean enableDebugLogging = false;
 
+    // ========== Debug ring buffer (static, not serialized) ==========
+
+    private static final int DEBUG_BUFFER_SIZE = 200;
+    private static final String[] debugBuffer = new String[DEBUG_BUFFER_SIZE];
+    private static int debugBufferIndex = 0;
+    private static int debugBufferCount = 0;
+    private static final DateTimeFormatter DEBUG_TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
+
+    // ========== Key inheritance helpers ==========
+
+    /**
+     * Returns the effective key code for a single-key tweak, resolving inheritance.
+     * If tweakKey is -1, returns the parentGlobal key.
+     */
+    public int getEffectiveSingleKey(int tweakKey, int parentGlobal) {
+        return tweakKey == -1 ? parentGlobal : tweakKey;
+    }
+
+    /**
+     * Returns the effective key code for a bundle operation, resolving two-level inheritance.
+     * per-operation override -> bundle global -> top-level global
+     */
+    public int getEffectiveBundleKey(int perOperationKey, int bundleGlobal, int globalKey) {
+        if (perOperationKey != -1) return perOperationKey;
+        if (bundleGlobal != -1) return bundleGlobal;
+        return globalKey;
+    }
+
     // ========== Per-tweak effective key helpers ==========
 
     /**
      * Get the effective "All But 1" key for a given tweak.
-     * Returns the per-tweak override if set (not -1), otherwise the global key.
+     * For bundle operations: per-operation -> bundleAllBut1Key -> allBut1Key
+     * For other tweaks: per-tweak -> allBut1Key
      */
     public int getEffectiveAllBut1Key(String tweakName) {
         int perTweak = switch (tweakName) {
@@ -93,12 +141,16 @@ public class InvTweaksConfig {
             case "hotbarModifiers" -> hotbarModifiersAllBut1Key;
             default -> -1;
         };
+        if (tweakName.equals("bundleExtract") || tweakName.equals("bundleInsertBundle") || tweakName.equals("bundleInsertItems")) {
+            return getEffectiveBundleKey(perTweak, bundleAllBut1Key, allBut1Key);
+        }
         return perTweak != -1 ? perTweak : allBut1Key;
     }
 
     /**
      * Get the effective "Only 1" key for a given tweak.
-     * Returns the per-tweak override if set (not -1), otherwise the global key.
+     * For bundle operations: per-operation -> bundleOnly1Key -> only1Key
+     * For other tweaks: per-tweak -> only1Key
      */
     public int getEffectiveOnly1Key(String tweakName) {
         int perTweak = switch (tweakName) {
@@ -110,6 +162,9 @@ public class InvTweaksConfig {
             case "hotbarModifiers" -> hotbarModifiersOnly1Key;
             default -> -1;
         };
+        if (tweakName.equals("bundleExtract") || tweakName.equals("bundleInsertBundle") || tweakName.equals("bundleInsertItems")) {
+            return getEffectiveBundleKey(perTweak, bundleOnly1Key, only1Key);
+        }
         return perTweak != -1 ? perTweak : only1Key;
     }
 
@@ -219,21 +274,24 @@ public class InvTweaksConfig {
     }
 
     /**
-     * Check if the throw half key is pressed.
+     * Check if the throw half key is pressed (resolves inheritance).
      */
     public boolean isThrowHalfKeyPressed() {
-        return isKeyPressed(throwHalfKey);
+        return isKeyPressed(getEffectiveSingleKey(throwHalfKey, miscModifierKey));
     }
 
     /**
-     * Check if the throw-all-but-1 key is pressed.
+     * Check if the fill-existing key is pressed (resolves inheritance).
      */
     public boolean isFillExistingKeyPressed() {
-        return isKeyPressed(fillExistingKey);
+        return isKeyPressed(getEffectiveSingleKey(fillExistingKey, miscModifierKey));
     }
 
+    /**
+     * Check if the throw-all-but-1 key is pressed (resolves inheritance).
+     */
     public boolean isThrowAllBut1KeyPressed() {
-        return isKeyPressed(throwAllBut1Key);
+        return isKeyPressed(getEffectiveSingleKey(throwAllBut1Key, allBut1Key));
     }
 
     /**
@@ -292,9 +350,9 @@ public class InvTweaksConfig {
     }
 
     /**
-     * Determine which mode is active for a feature using GLOBAL keys, 
+     * Determine which mode is active for a feature using GLOBAL keys,
      * Returns: "allbut1", "only1", or null if neither modifier is pressed.
-     * @deprecated Use getActiveMode(boolean, String) for per-tweak key support.
+     * @deprecated Use getActiveMode(String) for per-tweak key support.
      */
     @Deprecated
     public String getActiveMode() {
@@ -331,9 +389,13 @@ public class InvTweaksConfig {
     /**
      * Check if ANY modifier key (across all tweaks) is currently pressed.
      * Used for the global PICKUP_ALL block in the mixin HEAD.
+     * Checks global keys, misc modifier, bundle keys, and per-tweak custom keys.
      */
     public boolean isAnyModifierPressed() {
         if (isKeyPressed(allBut1Key) || isKeyPressed(only1Key)) return true;
+        if (isKeyPressed(miscModifierKey)) return true;
+        if (bundleAllBut1Key != -1 && isKeyPressed(bundleAllBut1Key)) return true;
+        if (bundleOnly1Key != -1 && isKeyPressed(bundleOnly1Key)) return true;
         String[] tweaks = {"clickPickup", "shiftClick", "bundleExtract", "bundleInsertBundle", "bundleInsertItems", "hotbarModifiers"};
         for (String tweak : tweaks) {
             if (hasCustomKeys(tweak)) {
@@ -346,38 +408,66 @@ public class InvTweaksConfig {
     }
 
     /**
-     * Check if the "fill existing stacks" combo is active.
-     * This fires when BOTH the allBut1 and only1 effective keys for "fillExisting"
-     * (or the shiftClick tweak keys, if fillExisting has no custom keys) are pressed.
-     * Uses fillExisting per-tweak keys if set, otherwise falls back to global keys.
+     * Check if the "fill existing stacks" modifier is active (resolves inheritance).
      */
     public boolean isFillExistingActive() {
-        return isKeyPressed(fillExistingKey);
+        return isKeyPressed(getEffectiveSingleKey(fillExistingKey, miscModifierKey));
     }
 
     /**
      * Determine the scroll transfer mode based on modifier keys.
      * Returns: "flush" (move all), "leave1" (leave 1 behind).
-     *
-     * Bare scroll always triggers flush mode (when scroll transfer is enabled).
-     *   - No modifier held → "flush"
-     *   - Leave-1 modifier held → "leave1"
+     * Resolves scrollLeave1Key inheritance from allBut1Key.
      */
     public String getScrollTransferMode() {
-        boolean leave1Pressed = isKeyPressed(scrollLeave1Key);
+        int effectiveKey = getEffectiveSingleKey(scrollLeave1Key, allBut1Key);
+        boolean leave1Pressed = isKeyPressed(effectiveKey);
         if (leave1Pressed) return "leave1";
         return "flush";
     }
 
+    // ========== Debug logging with ring buffer ==========
+
     /**
      * Debug logging helper with per-tweak tags.
      * Only logs when enableDebugLogging is true.
+     * Also writes to the ring buffer for later retrieval.
      * Usage: InvTweaksConfig.debugLog("SHIFT", "allbut1 mode | slot=%d | count=%d", slotId, count);
      */
     public static void debugLog(String tag, String message, Object... args) {
         InvTweaksConfig cfg = get();
         if (cfg == null || !cfg.enableDebugLogging) return;
         String formatted = args.length > 0 ? String.format(message, args) : message;
+        String logLine = "[IT:" + tag + "] " + formatted;
         LOGGER.info("[IT:{}] {}", tag, formatted);
+        String timestamped = LocalDateTime.now().format(DEBUG_TIME_FMT) + " " + logLine;
+        synchronized (debugBuffer) {
+            debugBuffer[debugBufferIndex] = timestamped;
+            debugBufferIndex = (debugBufferIndex + 1) % DEBUG_BUFFER_SIZE;
+            if (debugBufferCount < DEBUG_BUFFER_SIZE) debugBufferCount++;
+        }
+    }
+
+    /**
+     * Get the contents of the debug ring buffer as a single string (oldest to newest).
+     * Returns "No debug log entries" if the buffer is empty.
+     */
+    public static String getDebugLogContents() {
+        synchronized (debugBuffer) {
+            if (debugBufferCount == 0) return "No debug log entries";
+            StringBuilder sb = new StringBuilder();
+            int start;
+            if (debugBufferCount < DEBUG_BUFFER_SIZE) {
+                start = 0;
+            } else {
+                start = debugBufferIndex;
+            }
+            for (int i = 0; i < debugBufferCount; i++) {
+                int idx = (start + i) % DEBUG_BUFFER_SIZE;
+                if (i > 0) sb.append('\n');
+                sb.append(debugBuffer[idx]);
+            }
+            return sb.toString();
+        }
     }
 }

@@ -30,13 +30,12 @@ public class ClientPlayerMixin {
         if (it_throwHalfActive) return;
 
         InvTweaksConfig config = InvTweaksConfig.get();
-        if (!config.enableThrowHalf) return;
 
         // Only intercept single-item drop (Q, not Ctrl+Q)
         if (entireStack) return;
 
-        boolean throwHalf = config.isThrowHalfKeyPressed();
-        boolean throwAB1 = config.isThrowAllBut1KeyPressed();
+        boolean throwHalf = config.enableThrowHalf && config.isThrowHalfKeyPressed();
+        boolean throwAB1 = config.enableThrowAllBut1 && config.isThrowAllBut1KeyPressed();
         if (!throwHalf && !throwAB1) return;
 
         ClientPlayerEntity self = (ClientPlayerEntity) (Object) this;

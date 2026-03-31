@@ -21,6 +21,9 @@ public class InvTweaksClient implements ClientModInitializer {
     // Exposed so InvTweaksConfigScreen can read/display the keybind
     public static KeyBinding openConfigKey;
 
+    // Config key debounce (for the raw GLFW check fallback)
+    private static boolean configKeyWasDown = false;
+
     // Death detection state
     private static boolean wasAlive = true;
     private static java.util.Map<Integer, net.minecraft.item.ItemStack> cachedInventoryStacks = null;
@@ -40,10 +43,23 @@ public class InvTweaksClient implements ClientModInitializer {
 
         // Check for config screen keybind press each tick + death detection
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (openConfigKey.wasPressed()) {
-                if (client.currentScreen == null) {
-                    client.setScreen(new InvTweaksConfigScreen(null));
+            // Drain Fabric KeyBinding queue (kept registered for Mod Menu integration) but don't act on it
+            while (openConfigKey.wasPressed()) { /* discard */ }
+            // Only use the GLFW-based check via the config field value
+            InvTweaksConfig cfg = InvTweaksConfig.get();
+            boolean configKeyPressed = false;
+            if (cfg.openConfigKey != -1) {
+                long windowHandle = client.getWindow().getHandle();
+                boolean isDown = org.lwjgl.glfw.GLFW.glfwGetKey(windowHandle, cfg.openConfigKey) == org.lwjgl.glfw.GLFW.GLFW_PRESS;
+                if (isDown && !configKeyWasDown) {
+                    configKeyPressed = true;
                 }
+                configKeyWasDown = isDown;
+            } else {
+                configKeyWasDown = false;
+            }
+            if (configKeyPressed && client.currentScreen == null) {
+                client.setScreen(new InvTweaksConfigScreen(null));
             }
 
             // Death detection: cache inventory while alive, use cache on death
