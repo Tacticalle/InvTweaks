@@ -80,6 +80,7 @@ public class LayoutClipboard {
         public String containerTitle;        // e.g. "Chest", "Ender Chest", null for player inventory
         public String entryType;             // "container", "player", or "bundle"
         public int bundleColor = -1;         // RGB dye color for bundles (-1 = no custom color / use default)
+        public boolean favorited = false;    // Whether this entry is marked as a favorite
 
         public HistoryEntry(LayoutSnapshot snapshot, String label, long timestamp, long playtimeMinutes) {
             this(snapshot, label, timestamp, playtimeMinutes, null);
@@ -681,6 +682,67 @@ public class LayoutClipboard {
     }
 
     /**
+     * Clear only unfavorited entries from history.
+     */
+    public static void clearUnfavoritedHistory() {
+        List<Integer> toRemove = new ArrayList<>();
+        for (int i = history.size() - 1; i >= 0; i--) {
+            if (!history.get(i).favorited) {
+                toRemove.add(i);
+            }
+        }
+        for (int idx : toRemove) {
+            history.remove(idx);
+            if (activeContainerIndex == idx) activeContainerIndex = -1;
+            else if (activeContainerIndex > idx) activeContainerIndex--;
+            if (activePlayerIndex == idx) activePlayerIndex = -1;
+            else if (activePlayerIndex > idx) activePlayerIndex--;
+            if (activeBundleIndex == idx) activeBundleIndex = -1;
+            else if (activeBundleIndex > idx) activeBundleIndex--;
+            if (activeGrid9Index == idx) activeGrid9Index = -1;
+            else if (activeGrid9Index > idx) activeGrid9Index--;
+            if (activeHopper5Index == idx) activeHopper5Index = -1;
+            else if (activeHopper5Index > idx) activeHopper5Index--;
+            if (activeFurnace2Index == idx) activeFurnace2Index = -1;
+            else if (activeFurnace2Index > idx) activeFurnace2Index--;
+        }
+        ClipboardStorage.save();
+    }
+
+    /** Maximum number of favorited entries allowed. */
+    public static final int MAX_FAVORITES = 50;
+
+    /**
+     * Count the number of favorited entries in the history.
+     */
+    public static int getFavoritedCount() {
+        int count = 0;
+        for (HistoryEntry entry : history) {
+            if (entry.favorited) count++;
+        }
+        return count;
+    }
+
+    /**
+     * Toggle the favorited state of an entry at the given index.
+     * Returns true if the toggle was successful, false if the favorite limit was reached.
+     */
+    public static boolean toggleFavorite(int index) {
+        if (index < 0 || index >= history.size()) return false;
+        HistoryEntry entry = history.get(index);
+        if (!entry.favorited) {
+            if (getFavoritedCount() >= MAX_FAVORITES) {
+                return false;
+            }
+            entry.favorited = true;
+        } else {
+            entry.favorited = false;
+        }
+        ClipboardStorage.save();
+        return true;
+    }
+
+    /**
      * Add an entry to the front of the history list and prune if needed.
      */
     public static void addToHistory(HistoryEntry entry) {
@@ -709,17 +771,35 @@ public class LayoutClipboard {
             activeContainerIndex = 0;
         }
 
-        // Prune excess entries
+        // Prune excess unfavorited entries (favorited entries are exempt from the limit)
         int maxHistory = InvTweaksConfig.get().clipboardMaxHistory;
-        while (history.size() > maxHistory) {
-            int removeIdx = history.size() - 1;
+        int unfavoritedCount = 0;
+        for (HistoryEntry h : history) {
+            if (!h.favorited) unfavoritedCount++;
+        }
+        while (unfavoritedCount > maxHistory) {
+            int removeIdx = -1;
+            for (int i = history.size() - 1; i >= 0; i--) {
+                if (!history.get(i).favorited) {
+                    removeIdx = i;
+                    break;
+                }
+            }
+            if (removeIdx < 0) break;
             if (activeContainerIndex == removeIdx) activeContainerIndex = -1;
+            else if (activeContainerIndex > removeIdx) activeContainerIndex--;
             if (activePlayerIndex == removeIdx) activePlayerIndex = -1;
+            else if (activePlayerIndex > removeIdx) activePlayerIndex--;
             if (activeBundleIndex == removeIdx) activeBundleIndex = -1;
+            else if (activeBundleIndex > removeIdx) activeBundleIndex--;
             if (activeGrid9Index == removeIdx) activeGrid9Index = -1;
+            else if (activeGrid9Index > removeIdx) activeGrid9Index--;
             if (activeHopper5Index == removeIdx) activeHopper5Index = -1;
+            else if (activeHopper5Index > removeIdx) activeHopper5Index--;
             if (activeFurnace2Index == removeIdx) activeFurnace2Index = -1;
+            else if (activeFurnace2Index > removeIdx) activeFurnace2Index--;
             history.remove(removeIdx);
+            unfavoritedCount--;
         }
     }
 

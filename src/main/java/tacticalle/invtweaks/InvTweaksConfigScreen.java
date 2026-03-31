@@ -315,10 +315,10 @@ public class InvTweaksConfigScreen extends Screen {
                 "Hold the All-But-1 modifier + Q to throw all but one item from the hovered stack."));
         entryList.addConfigEntry(new FeatureEntry("Fill Existing Stacks", toggleW,
                 () -> config.enableFillExisting, v -> config.enableFillExisting = v,
-                "Hold the Misc modifier + shift-click to only fill existing partial stacks, skipping empty slots."));
+                "Hold the Misc modifier + shift-click or scroll to only fill existing partial stacks, skipping empty slots."));
         entryList.addConfigEntry(new FeatureEntry("Scroll Transfer", toggleW,
                 () -> config.enableScrollTransfer, v -> config.enableScrollTransfer = v,
-                "Scroll over a slot to transfer all matching items. Hold the All-But-1 modifier while scrolling to leave one behind in each stack."));
+                "Scroll over a slot to transfer all matching items. Hold All-But-1 while scrolling to leave one behind. Hold Misc to only fill existing stacks. Hold both to combine."));
     }
 
     private void addCopyPasteToggles(int toggleW) {

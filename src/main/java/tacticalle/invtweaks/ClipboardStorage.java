@@ -54,6 +54,9 @@ public class ClipboardStorage {
                 if (entry.bundleColor != -1) {
                     entryObj.addProperty("bundleColor", entry.bundleColor);
                 }
+                if (entry.favorited) {
+                    entryObj.addProperty("favorited", true);
+                }
 
                 JsonObject slotsObj = new JsonObject();
                 for (Map.Entry<Integer, LayoutClipboard.SlotData> slotEntry : entry.snapshot.slots.entrySet()) {
@@ -162,6 +165,7 @@ public class ClipboardStorage {
                     LayoutClipboard.LayoutSnapshot snapshot = new LayoutClipboard.LayoutSnapshot(slotCount, slots, isPlayerInventory);
                     LayoutClipboard.HistoryEntry entry = new LayoutClipboard.HistoryEntry(snapshot, label, timestamp, playtimeMinutes, containerTitle, entryType);
                     entry.bundleColor = entryObj.has("bundleColor") ? entryObj.get("bundleColor").getAsInt() : -1;
+                    entry.favorited = entryObj.has("favorited") && entryObj.get("favorited").getAsBoolean();
                     entries.add(entry);
                 }
             }

@@ -416,12 +416,17 @@ public class InvTweaksConfig {
 
     /**
      * Determine the scroll transfer mode based on modifier keys.
-     * Returns: "flush" (move all), "leave1" (leave 1 behind).
+     * Returns: "flush" (move all), "leave1" (leave 1 behind),
+     *          "fill-existing" (only top up existing stacks),
+     *          "leave1+fill-existing" (leave 1 behind AND only fill existing).
      * Resolves scrollLeave1Key inheritance from allBut1Key.
      */
     public String getScrollTransferMode() {
         int effectiveKey = getEffectiveSingleKey(scrollLeave1Key, allBut1Key);
         boolean leave1Pressed = isKeyPressed(effectiveKey);
+        boolean fillExistingPressed = isFillExistingActive();
+        if (leave1Pressed && fillExistingPressed) return "leave1+fill-existing";
+        if (fillExistingPressed) return "fill-existing";
         if (leave1Pressed) return "leave1";
         return "flush";
     }

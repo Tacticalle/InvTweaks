@@ -1059,7 +1059,7 @@ public abstract class HandledScreenMixin {
 
         // Allow scroll even with items on cursor — cursor items stay
 
-        // Determine scroll mode (flush / leave1 / null)
+        // Determine scroll mode (flush / leave1 / fill-existing / leave1+fill-existing)
         String scrollMode = config.getScrollTransferMode();
         InvTweaksConfig.debugLog("SCROLL", "decision | mode=%s | focusedSlot=%d | item=%s | count=%d | slotIsPlayer=%s | leave1KeyHeld=%s | verticalAmt=%.1f",
                 scrollMode != null ? scrollMode : "none",
@@ -1116,33 +1116,119 @@ public abstract class HandledScreenMixin {
                 scrollMode, itemType, scanPlayerSide ? "player" : "container",
                 scrollUp ? "up" : "down", matchingSlots.size());
 
-        if (scrollMode.equals("flush")) {
-            // Flush mode: shift-click every matching slot to move full stacks
+        boolean isFillExisting = scrollMode.contains("fill-existing");
+        boolean isLeave1 = scrollMode.contains("leave1");
+
+        if (isFillExisting && !isLeave1) {
+            // Fill-existing flush: manually merge into partial stacks only, never QUICK_MOVE
             for (int slotId : matchingSlots) {
                 ItemStack slotStack = handler.slots.get(slotId).getStack();
-                if (slotStack.isEmpty()) continue; // already moved by a previous QUICK_MOVE
+                if (slotStack.isEmpty()) continue;
 
-                InvTweaksConfig.debugLog("SCROLL", "flush QUICK_MOVE | slot=%d | count=%d", slotId, slotStack.getCount());
-                im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.QUICK_MOVE, player);
+                if (!it_hasExistingPartialStackOnDest(slotStack, scanPlayerSide)) {
+                    InvTweaksConfig.debugLog("SCROLL", "fill-existing skip | slot=%d | item=%s | reason=no existing stack on destination",
+                            slotId, slotStack.getItem());
+                    continue;
+                }
+
+                int beforeCount = slotStack.getCount();
+                ItemStack sourceRef = slotStack.copy();
+                // Pick up the source stack
+                im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+
+                // Merge cursor into each partial stack on destination
+                for (int di = 0; di < handler.slots.size(); di++) {
+                    Slot ds = handler.slots.get(di);
+                    boolean dsIsPlayer = ds.inventory instanceof net.minecraft.entity.player.PlayerInventory;
+                    if (dsIsPlayer == scanPlayerSide) continue; // skip source side
+                    if (ds.getStack().isEmpty()) continue;
+                    if (!ItemStack.areItemsAndComponentsEqual(ds.getStack(), sourceRef)) continue;
+                    if (ds.getStack().getCount() >= ds.getStack().getMaxCount()) continue;
+                    im.clickSlot(handler.syncId, di, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    InvTweaksConfig.debugLog("SCROLL", "fill-existing merge | src=%d | dest=%d", slotId, di);
+                    if (handler.getCursorStack().isEmpty()) break;
+                }
+
+                // Put remainder back into source slot
+                if (!handler.getCursorStack().isEmpty()) {
+                    im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    int remaining = handler.slots.get(slotId).getStack().getCount();
+                    InvTweaksConfig.debugLog("SCROLL", "fill-existing merge | src=%d | moved=%d | remaining=%d",
+                            slotId, beforeCount - remaining, remaining);
+                } else {
+                    InvTweaksConfig.debugLog("SCROLL", "fill-existing merge | src=%d | moved=%d | remaining=0",
+                            slotId, beforeCount);
+                }
             }
-        } else {
-            // Leave-1 mode: for each matching slot, move all but 1
+        } else if (isFillExisting && isLeave1) {
+            // Leave-1 + fill-existing: move all-but-1, merge into partial stacks only
             for (int slotId : matchingSlots) {
                 ItemStack slotStack = handler.slots.get(slotId).getStack();
                 if (slotStack.isEmpty()) continue;
                 if (slotStack.getCount() <= 1) {
                     InvTweaksConfig.debugLog("SCROLL", "leave1 skip | slot=%d | count=1", slotId);
-                    continue; // already has only 1, nothing to move
+                    continue;
+                }
+
+                if (!it_hasExistingPartialStackOnDest(slotStack, scanPlayerSide)) {
+                    InvTweaksConfig.debugLog("SCROLL", "fill-existing skip | slot=%d | item=%s | reason=no existing stack on destination",
+                            slotId, slotStack.getItem());
+                    continue;
+                }
+
+                int beforeCount = slotStack.getCount();
+                ItemStack sourceRef = slotStack.copy();
+                // Pick up source stack, right-click to leave 1 back
+                im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
+
+                // Merge cursor into each partial stack on destination
+                for (int di = 0; di < handler.slots.size(); di++) {
+                    Slot ds = handler.slots.get(di);
+                    boolean dsIsPlayer = ds.inventory instanceof net.minecraft.entity.player.PlayerInventory;
+                    if (dsIsPlayer == scanPlayerSide) continue; // skip source side
+                    if (ds.getStack().isEmpty()) continue;
+                    if (!ItemStack.areItemsAndComponentsEqual(ds.getStack(), sourceRef)) continue;
+                    if (ds.getStack().getCount() >= ds.getStack().getMaxCount()) continue;
+                    im.clickSlot(handler.syncId, di, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    InvTweaksConfig.debugLog("SCROLL", "fill-existing merge | src=%d | dest=%d", slotId, di);
+                    if (handler.getCursorStack().isEmpty()) break;
+                }
+
+                // Put remainder back into source slot (merge with the 1 left behind)
+                if (!handler.getCursorStack().isEmpty()) {
+                    im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
+                    int remaining = handler.slots.get(slotId).getStack().getCount();
+                    InvTweaksConfig.debugLog("SCROLL", "fill-existing merge | src=%d | moved=%d | remaining=%d",
+                            slotId, beforeCount - remaining, remaining);
+                } else {
+                    InvTweaksConfig.debugLog("SCROLL", "fill-existing merge | src=%d | moved=%d | remaining=1",
+                            slotId, beforeCount - 1);
+                }
+            }
+        } else if (!isLeave1) {
+            // Flush mode (no fill-existing): shift-click every matching slot to move full stacks
+            for (int slotId : matchingSlots) {
+                ItemStack slotStack = handler.slots.get(slotId).getStack();
+                if (slotStack.isEmpty()) continue;
+
+                InvTweaksConfig.debugLog("SCROLL", "flush QUICK_MOVE | slot=%d | count=%d", slotId, slotStack.getCount());
+                im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.QUICK_MOVE, player);
+            }
+        } else {
+            // Leave-1 mode (no fill-existing): move all but 1 via temp slot + QUICK_MOVE
+            for (int slotId : matchingSlots) {
+                ItemStack slotStack = handler.slots.get(slotId).getStack();
+                if (slotStack.isEmpty()) continue;
+                if (slotStack.getCount() <= 1) {
+                    InvTweaksConfig.debugLog("SCROLL", "leave1 skip | slot=%d | count=1", slotId);
+                    continue;
                 }
 
                 InvTweaksConfig.debugLog("SCROLL", "leave1 | slot=%d | count=%d", slotId, slotStack.getCount());
 
-                // Sequence:
-                // 1. Pick up full stack from slot → cursor=N, slot=empty
                 im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
-                // 2. Right-click to place 1 back → cursor=N-1, slot=1
                 im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, SlotActionType.PICKUP, player);
-                // 3. Deposit cursor (N-1) into a temp slot, then QUICK_MOVE it to the other side
                 int tempSlot = it_findEmptySlotOnSameSide(slotId, scanPlayerSide);
                 boolean tempOnDestSide = false;
                 if (tempSlot < 0) {
@@ -1154,36 +1240,30 @@ public abstract class HandledScreenMixin {
                 }
                 if (tempSlot >= 0) {
                     if (!tempOnDestSide) {
-                        // Temp is on source side — deposit then QUICK_MOVE to destination
                         im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                         im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.QUICK_MOVE, player);
                     } else {
-                        // Temp is on destination side — try merging with existing partial stacks first
                         boolean deposited = false;
                         for (int di = 0; di < handler.slots.size(); di++) {
                             Slot ds = handler.slots.get(di);
                             boolean dsIsPlayer = ds.inventory instanceof net.minecraft.entity.player.PlayerInventory;
-                            if (dsIsPlayer == scanPlayerSide) continue; // skip source side
+                            if (dsIsPlayer == scanPlayerSide) continue;
                             if (ds.getStack().isEmpty()) continue;
                             if (ds.getStack().getItem() != itemType) continue;
                             if (ds.getStack().getCount() >= ds.getStack().getMaxCount()) continue;
-                            // Found a partial stack on dest side — left-click merges cursor into it
                             im.clickSlot(handler.syncId, di, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                             InvTweaksConfig.debugLog("SCROLL", "leave1 merged into dest slot %d", di);
                             if (handler.getCursorStack().isEmpty()) {
                                 deposited = true;
                                 break;
                             }
-                            // Still have items on cursor — continue merging into other partial stacks
                         }
                         if (!deposited && !handler.getCursorStack().isEmpty()) {
-                            // Remaining items go into the empty temp slot
                             im.clickSlot(handler.syncId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                             InvTweaksConfig.debugLog("SCROLL", "leave1 remainder into empty dest slot %d", tempSlot);
                         }
                     }
                 } else {
-                    // No temp slot on either side — put items back in source slot
                     InvTweaksConfig.debugLog("SCROLL", "leave1 no temp slot | slot=%d | putting back", slotId);
                     im.clickSlot(handler.syncId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, SlotActionType.PICKUP, player);
                 }
@@ -1214,6 +1294,25 @@ public abstract class HandledScreenMixin {
             return i;
         }
         return -1;
+    }
+
+    /**
+     * Check if the destination side has any slot containing the same item with room for more.
+     * Used by fill-existing scroll mode to skip items with no existing partial stack on destination.
+     * scanPlayerSide is the SOURCE side; destination is the opposite.
+     */
+    @Unique
+    private boolean it_hasExistingPartialStackOnDest(ItemStack sourceStack, boolean scanPlayerSide) {
+        for (int i = 0; i < handler.slots.size(); i++) {
+            Slot s = handler.slots.get(i);
+            boolean slotIsPlayer = s.inventory instanceof net.minecraft.entity.player.PlayerInventory;
+            if (slotIsPlayer == scanPlayerSide) continue;
+            ItemStack destStack = s.getStack();
+            if (destStack.isEmpty()) continue;
+            if (!ItemStack.areItemsAndComponentsEqual(destStack, sourceStack)) continue;
+            if (destStack.getCount() < destStack.getMaxCount()) return true;
+        }
+        return false;
     }
 
     // ========== REFLECTION DETECTION ==========

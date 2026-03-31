@@ -52,6 +52,11 @@ public class ClipboardHistoryScreen extends Screen {
     private static final int PANEL_BORDER = 0xFF555555;
 
     private static final int MULTI_SELECT_BG = 0x404488FF;
+    private static final int GOLD = 0xFFFFD700;
+    private static final int STAR_GRAY = 0xFFAAAAAA;
+
+    private static final int TAB_ALL = 0;
+    private static final int TAB_FAVORITES = 1;
 
     /** Tracks a rendered preview slot's screen bounds and item for hover tooltip. */
     private record PreviewSlotInfo(int x, int y, int size, ItemStack stack) {}
@@ -69,6 +74,14 @@ public class ClipboardHistoryScreen extends Screen {
     private int selectionAnchor = -1;
     private boolean confirmingBulkDelete = false;
     private ButtonWidget deleteButton;
+
+    // Tab state
+    private int activeTab = TAB_ALL;
+    private ButtonWidget tabAllButton;
+    private ButtonWidget tabFavoritesButton;
+
+    // Mapping from display index (in the filtered/sorted list) to real history index
+    private final List<Integer> displayToHistoryIndex = new ArrayList<>();
 
     // Layout
     private int leftPanelX, leftPanelWidth;
@@ -98,8 +111,26 @@ public class ClipboardHistoryScreen extends Screen {
         rightPanelX = startX + leftPanelWidth + 10;
         rightPanelWidth = totalWidth - leftPanelWidth - 10;
 
-        panelTop = 30;
+        panelTop = 50;
         panelBottom = this.height - 36;
+
+        // Tab buttons
+        int tabW = 70;
+        int tabGap = 4;
+        int tabStartX = leftPanelX;
+        int tabY = 28;
+
+        tabAllButton = ButtonWidget.builder(Text.literal("All"), button -> {
+            switchTab(TAB_ALL);
+        }).dimensions(tabStartX, tabY, tabW, BUTTON_HEIGHT).build();
+        addDrawableChild(tabAllButton);
+
+        tabFavoritesButton = ButtonWidget.builder(Text.literal("Favorites"), button -> {
+            switchTab(TAB_FAVORITES);
+        }).dimensions(tabStartX + tabW + tabGap, tabY, tabW, BUTTON_HEIGHT).build();
+        addDrawableChild(tabFavoritesButton);
+
+        updateTabButtonStyles();
 
         // Entry list (left panel)
         entryList = new HistoryEntryList(this.client, leftPanelWidth, panelBottom - panelTop, panelTop, ROW_HEIGHT);
@@ -119,11 +150,11 @@ public class ClipboardHistoryScreen extends Screen {
         }).dimensions(btnStartX, btnY, btnW, BUTTON_HEIGHT).build();
         addDrawableChild(deleteButton);
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("Delete All"), button -> {
+        addDrawableChild(ButtonWidget.builder(Text.literal("Clear All"), button -> {
             multiSelected.clear();
             selectionAnchor = -1;
             confirmingBulkDelete = false;
-            LayoutClipboard.clearHistory();
+            LayoutClipboard.clearUnfavoritedHistory();
             hoveredEntryIndex = -1;
             highlightedIndex = -1;
             updateDeleteButtonText();
@@ -144,8 +175,12 @@ public class ClipboardHistoryScreen extends Screen {
                 performBulkDelete();
             }
         } else {
-            if (highlightedIndex >= 0 && highlightedIndex < LayoutClipboard.getHistory().size()) {
-                LayoutClipboard.removeHistoryEntry(highlightedIndex);
+            int realIndex = getDisplayRealIndex(highlightedIndex);
+            if (realIndex >= 0 && realIndex < LayoutClipboard.getHistory().size()) {
+                if (LayoutClipboard.getHistory().get(realIndex).favorited) {
+                    return;
+                }
+                LayoutClipboard.removeHistoryEntry(realIndex);
                 ClipboardStorage.save();
                 highlightedIndex = -1;
                 confirmingBulkDelete = false;
@@ -156,12 +191,18 @@ public class ClipboardHistoryScreen extends Screen {
     }
 
     private void performBulkDelete() {
-        List<Integer> sorted = new ArrayList<>(multiSelected);
-        Collections.sort(sorted, Collections.reverseOrder());
-        for (int idx : sorted) {
-            if (idx >= 0 && idx < LayoutClipboard.getHistory().size()) {
-                LayoutClipboard.removeHistoryEntry(idx);
+        List<Integer> realIndices = new ArrayList<>();
+        for (int displayIdx : multiSelected) {
+            int realIdx = getDisplayRealIndex(displayIdx);
+            if (realIdx >= 0 && realIdx < LayoutClipboard.getHistory().size()) {
+                if (!LayoutClipboard.getHistory().get(realIdx).favorited) {
+                    realIndices.add(realIdx);
+                }
             }
+        }
+        Collections.sort(realIndices, Collections.reverseOrder());
+        for (int idx : realIndices) {
+            LayoutClipboard.removeHistoryEntry(idx);
         }
         ClipboardStorage.save();
         multiSelected.clear();
@@ -170,6 +211,13 @@ public class ClipboardHistoryScreen extends Screen {
         confirmingBulkDelete = false;
         updateDeleteButtonText();
         rebuildEntryList();
+    }
+
+    private int getDisplayRealIndex(int displayIndex) {
+        if (displayIndex >= 0 && displayIndex < displayToHistoryIndex.size()) {
+            return displayToHistoryIndex.get(displayIndex);
+        }
+        return -1;
     }
 
     private void updateDeleteButtonText() {
@@ -184,6 +232,7 @@ public class ClipboardHistoryScreen extends Screen {
     }
 
     private void populateEntryList() {
+        displayToHistoryIndex.clear();
         List<LayoutClipboard.HistoryEntry> history = LayoutClipboard.getHistory();
         int activeContainer = LayoutClipboard.getActiveContainerIndex();
         int activePlayer = LayoutClipboard.getActivePlayerIndex();
@@ -192,27 +241,64 @@ public class ClipboardHistoryScreen extends Screen {
         int activeHopper5 = LayoutClipboard.getActiveHopper5Index();
         int activeFurnace2 = LayoutClipboard.getActiveFurnace2Index();
 
-        for (int i = 0; i < history.size(); i++) {
-            LayoutClipboard.HistoryEntry entry = history.get(i);
-            boolean isActive;
-            if (entry.isBundle()) {
-                isActive = (i == activeBundle);
-            } else if (entry.snapshot.isPlayerInventory) {
-                isActive = (i == activePlayer);
-            } else if (LayoutClipboard.TYPE_GRID9.equals(entry.entryType)) {
-                isActive = (i == activeGrid9);
-            } else if (LayoutClipboard.TYPE_HOPPER5.equals(entry.entryType)) {
-                isActive = (i == activeHopper5);
-            } else if (LayoutClipboard.TYPE_FURNACE2.equals(entry.entryType)) {
-                isActive = (i == activeFurnace2);
-            } else {
-                isActive = (i == activeContainer);
+        List<Integer> orderedIndices = new ArrayList<>();
+        if (activeTab == TAB_FAVORITES) {
+            for (int i = 0; i < history.size(); i++) {
+                if (history.get(i).favorited) {
+                    orderedIndices.add(i);
+                }
             }
-            entryList.addConfigEntry(new HistoryItemEntry(i, entry, isActive));
+        } else {
+            // TAB_ALL: show all entries in natural recency order (newest first)
+            for (int i = 0; i < history.size(); i++) {
+                orderedIndices.add(i);
+            }
         }
 
-        if (history.isEmpty()) {
+        for (int displayIdx = 0; displayIdx < orderedIndices.size(); displayIdx++) {
+            int realIdx = orderedIndices.get(displayIdx);
+            displayToHistoryIndex.add(realIdx);
+            LayoutClipboard.HistoryEntry entry = history.get(realIdx);
+            boolean isActive;
+            if (entry.isBundle()) {
+                isActive = (realIdx == activeBundle);
+            } else if (entry.snapshot.isPlayerInventory) {
+                isActive = (realIdx == activePlayer);
+            } else if (LayoutClipboard.TYPE_GRID9.equals(entry.entryType)) {
+                isActive = (realIdx == activeGrid9);
+            } else if (LayoutClipboard.TYPE_HOPPER5.equals(entry.entryType)) {
+                isActive = (realIdx == activeHopper5);
+            } else if (LayoutClipboard.TYPE_FURNACE2.equals(entry.entryType)) {
+                isActive = (realIdx == activeFurnace2);
+            } else {
+                isActive = (realIdx == activeContainer);
+            }
+            entryList.addConfigEntry(new HistoryItemEntry(displayIdx, realIdx, entry, isActive));
+        }
+
+        if (orderedIndices.isEmpty()) {
             entryList.addConfigEntry(new EmptyEntry());
+        }
+    }
+
+    private void switchTab(int tab) {
+        activeTab = tab;
+        multiSelected.clear();
+        selectionAnchor = -1;
+        highlightedIndex = -1;
+        hoveredEntryIndex = -1;
+        confirmingBulkDelete = false;
+        updateDeleteButtonText();
+        updateTabButtonStyles();
+        rebuildEntryList();
+    }
+
+    private void updateTabButtonStyles() {
+        if (tabAllButton != null) {
+            tabAllButton.setMessage(Text.literal(activeTab == TAB_ALL ? "[All]" : "All"));
+        }
+        if (tabFavoritesButton != null) {
+            tabFavoritesButton.setMessage(Text.literal(activeTab == TAB_FAVORITES ? "[Favorites]" : "Favorites"));
         }
     }
 
@@ -244,21 +330,22 @@ public class ClipboardHistoryScreen extends Screen {
         List<LayoutClipboard.HistoryEntry> history = LayoutClipboard.getHistory();
 
         // Priority: hovered entry > highlighted entry > nothing
-        int previewIndex = -1;
-        if (hoveredEntryIndex >= 0 && hoveredEntryIndex < history.size()) {
-            previewIndex = hoveredEntryIndex;
-        } else if (highlightedIndex >= 0 && highlightedIndex < history.size()) {
-            previewIndex = highlightedIndex;
+        int realPreviewIndex = -1;
+        if (hoveredEntryIndex >= 0) {
+            realPreviewIndex = getDisplayRealIndex(hoveredEntryIndex);
+        }
+        if (realPreviewIndex < 0 && highlightedIndex >= 0) {
+            realPreviewIndex = getDisplayRealIndex(highlightedIndex);
         }
 
-        if (previewIndex < 0) {
+        if (realPreviewIndex < 0 || realPreviewIndex >= history.size()) {
             // Show "Hover to preview" text
             context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("Hover an entry to preview"),
                     rightPanelX + rightPanelWidth / 2, panelTop + (panelBottom - panelTop) / 2, GRAY);
             return;
         }
 
-        LayoutClipboard.HistoryEntry entry = history.get(previewIndex);
+        LayoutClipboard.HistoryEntry entry = history.get(realPreviewIndex);
         LayoutClipboard.LayoutSnapshot snapshot = entry.snapshot;
 
         // Track rendered slots for hover tooltips
@@ -683,19 +770,21 @@ public class ClipboardHistoryScreen extends Screen {
     // ========== History item entry ==========
 
     private class HistoryItemEntry extends HistoryListEntry {
-        private final int index;
+        private final int displayIndex;
+        private final int realIndex;
         private final LayoutClipboard.HistoryEntry entry;
         private final boolean isActive;
         private final ButtonWidget selectBtn;
+        private static final int STAR_WIDTH = 14;
 
-        HistoryItemEntry(int index, LayoutClipboard.HistoryEntry entry, boolean isActive) {
-            this.index = index;
+        HistoryItemEntry(int displayIndex, int realIndex, LayoutClipboard.HistoryEntry entry, boolean isActive) {
+            this.displayIndex = displayIndex;
+            this.realIndex = realIndex;
             this.entry = entry;
             this.isActive = isActive;
 
             this.selectBtn = ButtonWidget.builder(Text.literal("Select"), button -> {
-                LayoutClipboard.setActiveIndex(index);
-                // Rebuild the entry list to update the ▶ indicator (stay open)
+                LayoutClipboard.setActiveIndex(realIndex);
                 rebuildEntryList();
             }).dimensions(0, 0, 50, BUTTON_HEIGHT).build();
         }
@@ -706,27 +795,30 @@ public class ClipboardHistoryScreen extends Screen {
             int y = getY();
             int w = getWidth();
 
-            // Update hovered entry for preview
             if (hovered) {
-                hoveredEntryIndex = index;
+                hoveredEntryIndex = displayIndex;
             }
 
-            // Multi-select highlight
-            if (multiSelected.contains(index)) {
+            if (multiSelected.contains(displayIndex)) {
                 context.fill(x - 2, y - 1, x + w + 2, y + ROW_HEIGHT - 3, MULTI_SELECT_BG);
             }
 
-            // Visual highlight: highlighted entry gets a light blue border
-            if (highlightedIndex == index && !multiSelected.contains(index)) {
-                context.fill(x - 2, y - 1, x + w + 2, y + ROW_HEIGHT - 3, 0x6055AAFF); // light blue bg
+            if (highlightedIndex == displayIndex && !multiSelected.contains(displayIndex)) {
+                context.fill(x - 2, y - 1, x + w + 2, y + ROW_HEIGHT - 3, 0x6055AAFF);
             }
 
-            // Hover highlight (dimmer than selected)
-            if (hovered && highlightedIndex != index && !multiSelected.contains(index)) {
+            if (hovered && highlightedIndex != displayIndex && !multiSelected.contains(displayIndex)) {
                 context.fill(x - 2, y - 1, x + w + 2, y + ROW_HEIGHT - 3, 0x40FFFFFF);
             }
 
-            // Active indicator — bundle entries get orange (or dye color), player gets aqua, container gets yellow
+            // Star icon (left side)
+            String starChar = entry.favorited ? "\u2605" : "\u2606";
+            int starColor = entry.favorited ? GOLD : STAR_GRAY;
+            context.drawTextWithShadow(textRenderer, Text.literal(starChar), x, y + 2, starColor);
+
+            int labelX = x + STAR_WIDTH;
+
+            // Active indicator
             int textColor;
             if (entry.isBundle()) {
                 textColor = entry.bundleColor != -1 ? (0xFF000000 | entry.bundleColor) : ORANGE;
@@ -736,14 +828,13 @@ public class ClipboardHistoryScreen extends Screen {
             String prefix = isActive ? "\u25B6 " : "  ";
             String label = prefix + entry.label;
 
-            // Truncate label to prevent overlap with Select button (Fix 4)
-            int availableLabelWidth = w - selectBtn.getWidth() - 6;
+            int availableLabelWidth = w - selectBtn.getWidth() - 6 - STAR_WIDTH;
             String displayLabel = textRenderer.trimToWidth(label, availableLabelWidth);
-            context.drawTextWithShadow(textRenderer, Text.literal(displayLabel), x, y + 2, textColor);
+            context.drawTextWithShadow(textRenderer, Text.literal(displayLabel), labelX, y + 2, textColor);
 
             // Time
             String timeStr = formatRelativeTime(entry.timestamp);
-            context.drawTextWithShadow(textRenderer, Text.literal("  " + timeStr), x, y + 14, DARK_GRAY);
+            context.drawTextWithShadow(textRenderer, Text.literal("  " + timeStr), labelX, y + 14, DARK_GRAY);
 
             // Select button
             selectBtn.setX(x + w - selectBtn.getWidth());
@@ -759,27 +850,41 @@ public class ClipboardHistoryScreen extends Screen {
             }
 
             if (click.button() == 0) {
+                // Check if the star was clicked (left 14px of the entry)
+                int x = getX();
+                if (click.x() >= x && click.x() < x + STAR_WIDTH) {
+                    boolean success = LayoutClipboard.toggleFavorite(realIndex);
+                    if (success) {
+                        if (entry.favorited) {
+                            InvTweaksOverlay.show("Entry favorited", GOLD);
+                        } else {
+                            InvTweaksOverlay.show("Entry unfavorited", WHITE);
+                        }
+                    } else {
+                        InvTweaksOverlay.show("Favorite limit reached (50)", YELLOW);
+                    }
+                    rebuildEntryList();
+                    return true;
+                }
+
                 if (isCtrlOrCmdHeld()) {
-                    // Include the previously highlighted entry in multi-selection
                     if (highlightedIndex >= 0 && !multiSelected.contains(highlightedIndex)) {
                         multiSelected.add(highlightedIndex);
                     }
                     highlightedIndex = -1;
-                    // Ctrl/Cmd+click: toggle individual entry in multi-selection
-                    if (multiSelected.contains(index)) {
-                        multiSelected.remove(index);
+                    if (multiSelected.contains(displayIndex)) {
+                        multiSelected.remove(displayIndex);
                     } else {
-                        multiSelected.add(index);
+                        multiSelected.add(displayIndex);
                     }
-                    selectionAnchor = index;
+                    selectionAnchor = displayIndex;
                     confirmingBulkDelete = false;
                     updateDeleteButtonText();
                     return true;
                 } else if (isShiftHeld()) {
-                    // Shift+click: range select from anchor to this index
                     int anchor = selectionAnchor >= 0 ? selectionAnchor : 0;
-                    int from = Math.min(anchor, index);
-                    int to = Math.max(anchor, index);
+                    int from = Math.min(anchor, displayIndex);
+                    int to = Math.max(anchor, displayIndex);
                     for (int i = from; i <= to; i++) {
                         multiSelected.add(i);
                     }
@@ -787,11 +892,10 @@ public class ClipboardHistoryScreen extends Screen {
                     updateDeleteButtonText();
                     return true;
                 } else {
-                    // Normal click: clear multi-selection, set highlight for single select
                     multiSelected.clear();
-                    selectionAnchor = index;
+                    selectionAnchor = displayIndex;
                     confirmingBulkDelete = false;
-                    highlightedIndex = index;
+                    highlightedIndex = displayIndex;
                     updateDeleteButtonText();
                     return true;
                 }
