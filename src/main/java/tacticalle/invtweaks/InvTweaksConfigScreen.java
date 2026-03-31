@@ -263,7 +263,9 @@ public class InvTweaksConfigScreen extends Screen {
         entryList.addConfigEntry(new FeatureEntry("Enable Debug Logging", toggleW,
                 () -> config.enableDebugLogging, v -> {
                     config.enableDebugLogging = v;
+                    double savedScroll = entryList.getScrollY();
                     rebuildEntryList();
+                    entryList.setScrollY(savedScroll);
                 },
                 "Logs detailed mod activity to the game log. Adds overhead \u2014 leave off during normal play."));
 
@@ -412,7 +414,9 @@ public class InvTweaksConfigScreen extends Screen {
      * Appends or removes entries to preserve scroll position.
      */
     private void toggleAdvancedOverrideEntries() {
+        double savedScroll = entryList.getScrollY();
         rebuildEntryList();
+        entryList.setScrollY(savedScroll);
     }
 
     private void appendAdvancedOverrideEntries() {
