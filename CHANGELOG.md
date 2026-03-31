@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.9.1] - 2026-03-30
+
+### Features
+- **Clipboard Favorites** — Click the star icon on any clipboard history entry to mark it as a favorite. Favorited entries are never evicted by the max history limit, can't be individually deleted, and are skipped by "Clear All." A new "Favorites" tab in the clipboard history browser shows only favorited entries. Maximum 50 favorites.
+- **Fill-Existing Scroll** — Hold the Misc modifier while scrolling to transfer items only into existing partial stacks on the destination side. Items with no matching partial stack are skipped. Uses manual click-merging to prevent overflow into empty slots.
+- **Leave-1 + Fill-Existing Scroll** — Hold AllBut1 + Misc while scrolling to combine leave-1 (right-click 1 back) with fill-existing (manual merge into partials only).
+
+### Bug Fixes
+- **Fixed fill-existing scroll overflow** — Fill-existing scroll originally used QUICK_MOVE which could place items in empty slots. Replaced with manual click-merging algorithm (pick up → left-click partial stacks → put remainder back).
+- **Fixed leave-1 + fill-existing placing items in empty slots** — Pre-check now gates entire leave-1+fill-existing sequence.
+- **Fixed stale ItemStack reference during fill-existing scroll** — Source ItemStack is now copied before pickup to prevent stale reference in destination comparisons (pickup mutates the slot).
+
+### Changes
+- Scroll transfer now supports 4 modes: flush (bare scroll), leave-1 (AllBut1+scroll), fill-existing (Misc+scroll), leave-1+fill-existing (AllBut1+Misc+scroll)
+- Updated tooltips for Scroll Transfer and Fill Existing Stacks entries in the config screen
+
+## [1.9.0] - 2026-03-30
+
+### Features
+- **Three Global Modifier Keys** — New `miscModifierKey` global for throw-half and fill-existing actions, alongside the existing `allBut1Key` and `only1Key`. OS-specific defaults: Mac uses Cmd/Ctrl/Option, Windows/Linux uses Alt/Ctrl/R.Alt.
+- **Bundle Keys** — New `bundleAllBut1Key` and `bundleOnly1Key` config fields for bundle-specific modifier key overrides. Two-level inheritance: per-operation override → bundle pair → global.
+- **Single-Key Inheritance** — `throwAllBut1Key`, `throwHalfKey`, `fillExistingKey`, and `scrollLeave1Key` now default to -1 (inherit from parent global) instead of hardcoded GLFW values. Inheritance chains: throwAllBut1/scrollLeave1 → allBut1Key, throwHalf/fillExisting → miscModifierKey.
+- **Config Screen Tooltip System** — Every config entry now has a hover tooltip (300ms delay, renders below entry or above if near screen bottom). Tooltips trigger on the text label area only, not on buttons.
+- **Collapsible Advanced Options** — Per-tweak key overrides moved to a collapsible "Advanced Options" section at the bottom of the Hotkeys tab (collapsed by default, click header to expand/collapse).
+- **Editable Open Config Key** — The config screen open key (default: K) is now editable in the Hotkeys tab instead of being a static info text.
+- **Independent Throw All-But-1 Toggle** — New `enableThrowAllBut1` config field (default: true) allows enabling/disabling throw-allBut1 separately from throw-half.
+- **Debug Ring Buffer** — 200-line circular buffer captures debug log output. "Copy Debug Log" button in the Debug tab copies the buffer to the system clipboard (visible only when debug logging is ON).
+- **Report Bug Button** — "Report Bug" button in the Debug tab opens the GitHub issues page in the browser. Always visible.
+
+### Changes
+- Config screen reduced from 5 tabs to 4 tabs: All, Tweaks, Hotkeys, Debug. Advanced tab removed; content moved to collapsible section in Hotkeys.
+- **All tab** simplified: Modifier Keys at top, then feature toggles, copy/paste settings, clipboard settings, bundle keys, other tweaks. No advanced overrides.
+- **Tweaks tab** reorganized: Enable/Disable Tweaks, Copy/Paste, Clipboard Settings, Other Tweaks.
+- **Hotkeys tab** reorganized: Modifier Keys, Bundle Keys, Copy/Paste Layout, Open Config Key, Advanced Options (collapsible).
+- Override entries now show "AB1: Global" / "O1: Global" labels when set to -1 (inherited). Bundle keys show resolved parent key name.
+- Section renames: "Modifier-Pair Tweaks" → "Enable/Disable Tweaks", "Single-Key Tweaks" → "Other Tweaks", "Scroll Wheel Transfer" → "Scroll Transfer", "Global Modifier Keys" → "Modifier Keys", "Advanced Overrides" → "Advanced Options".
+- New entry types: `OverridePairEntry`, `OverrideSingleEntry`, `ActionButtonEntry`. Removed: `TweakKeyModeEntry`, `TweakKeyPairEntry`, `HeaderEntry`.
+
+### Removed
+- `clipboardExpiryPlaytimeHours` config field and all expiry logic — max history count is the only limit now.
+- `enableHotbarModifiers` config field — hotbar modifiers are always enabled.
+
 ## [1.8.0] - 2026-03-29
 
 ### Features
