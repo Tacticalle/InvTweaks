@@ -350,24 +350,6 @@ public class InvTweaksConfig {
     }
 
     /**
-     * Determine which mode is active for a feature using GLOBAL keys,
-     * Returns: "allbut1", "only1", or null if neither modifier is pressed.
-     * @deprecated Use getActiveMode(String) for per-tweak key support.
-     */
-    @Deprecated
-    public String getActiveMode() {
-        boolean allBut1Pressed = isKeyPressed(allBut1Key);
-        boolean only1Pressed = isKeyPressed(only1Key);
-
-        if (allBut1Pressed && !only1Pressed) {
-            return "allbut1";
-        } else if (only1Pressed && !allBut1Pressed) {
-            return "only1";
-        }
-        return null;
-    }
-
-    /**
      * Determine which mode is active for a feature using per-tweak effective keys.
      * Returns: "allbut1", "only1", or null if neither modifier is pressed.
      */

@@ -26,7 +26,8 @@ public class InvTweaksClient implements ClientModInitializer {
 
     // Death detection state
     private static boolean wasAlive = true;
-    private static java.util.Map<Integer, net.minecraft.item.ItemStack> cachedInventoryStacks = null;
+    private static java.util.Map<Integer, net.minecraft.item.ItemStack> cachedInventoryStacks = new java.util.LinkedHashMap<>();
+    private static boolean cachedInventoryValid = false;
 
     @Override
     public void onInitializeClient() {
@@ -68,7 +69,7 @@ public class InvTweaksClient implements ClientModInitializer {
 
                 if (isAlive) {
                     // Cache inventory ItemStack copies every tick while alive
-                    cachedInventoryStacks = new java.util.LinkedHashMap<>();
+                    cachedInventoryStacks.clear();
                     net.minecraft.entity.player.PlayerInventory inv = client.player.getInventory();
                     // Main inventory (keys 0-35) and hotbar
                     for (int i = 0; i < 36; i++) {
@@ -80,9 +81,10 @@ public class InvTweaksClient implements ClientModInitializer {
                     }
                     // Offhand: inv slot 40
                     cachedInventoryStacks.put(40, inv.getStack(40).copy());
+                    cachedInventoryValid = true;
                 }
 
-                if (wasAlive && !isAlive && cachedInventoryStacks != null) {
+                if (wasAlive && !isAlive && cachedInventoryValid) {
                     // Player just died — convert cached stacks to SlotData with component serialization
                     InvTweaksConfig.debugLog("DEATH", "Player died, auto-copying cached inventory layout");
                     java.util.Map<Integer, LayoutClipboard.SlotData> slotDataMap = new java.util.LinkedHashMap<>();
@@ -104,12 +106,12 @@ public class InvTweaksClient implements ClientModInitializer {
                         }
                     }
                     LayoutClipboard.autoSaveFromCache(slotDataMap);
-                    cachedInventoryStacks = null;
+                    cachedInventoryValid = false;
                 }
                 wasAlive = isAlive;
             } else {
                 wasAlive = true;
-                cachedInventoryStacks = null;
+                cachedInventoryValid = false;
             }
         });
 

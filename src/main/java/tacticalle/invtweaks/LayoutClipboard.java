@@ -2,7 +2,6 @@ package tacticalle.invtweaks;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.client.gui.screen.ingame.InventoryScreen;
 import net.minecraft.client.network.ClientPlayerInteractionManager;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
@@ -25,7 +24,6 @@ import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryOps;
 import net.minecraft.stat.Stats;
 import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
@@ -486,32 +484,6 @@ public class LayoutClipboard {
     }
 
     /**
-     * Find where a snapshot item currently lives in the handler.
-     * Only searches diffSlots (slots that don't already match the snapshot),
-     * skipping already-claimed slots. Prefers the closest slot to the target.
-     */
-    private static int findSourceForUndo(ScreenHandler handler, ItemStack target,
-                                          int targetSlot, Set<Integer> excludeSlots,
-                                          Set<Integer> diffSlots) {
-        int bestSlot = -1;
-        int bestDist = Integer.MAX_VALUE;
-        for (int i : diffSlots) {
-            if (i == targetSlot) continue;
-            if (excludeSlots.contains(i)) continue;
-            ItemStack current = handler.getSlot(i).getStack();
-            if (ItemStack.areItemsAndComponentsEqual(current, target)
-                    && current.getCount() == target.getCount()) {
-                int dist = Math.abs(i - targetSlot);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    bestSlot = i;
-                }
-            }
-        }
-        return bestSlot;
-    }
-
-    /**
      * Find any empty slot in the handler, excluding specified slots.
      */
     private static int findAnyEmptySlot(ScreenHandler handler, int exclude1, int exclude2) {
@@ -815,14 +787,6 @@ public class LayoutClipboard {
         } catch (Exception e) {
             return 0;
         }
-    }
-
-    /**
-     * Prune expired entries. Expiry has been removed — this method is now a no-op.
-     * Kept for backwards compatibility with callers.
-     */
-    public static void pruneExpired() {
-        // Expiry logic removed in Batch 16a.1. Max history count is the only limit.
     }
 
     /**
@@ -1216,8 +1180,7 @@ public class LayoutClipboard {
             }
             case CRAFTER -> {
                 // Crafter: 9 slots (handler slots 0-8), check for locked slots
-                // TODO: verify crafter slot disabled detection in 1.21.11 Yarn
-                // CrafterScreenHandler.isSlotDisabled(int) — NEEDS VERIFICATION
+                // CrafterScreenHandler.isSlotDisabled(int) — verified working in 1.21.11 Yarn
                 for (int i = 0; i < 9; i++) {
                     if (i >= handler.slots.size()) break;
                     boolean isLocked = false;

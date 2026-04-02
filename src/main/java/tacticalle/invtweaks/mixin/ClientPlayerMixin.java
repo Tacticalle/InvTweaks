@@ -2,8 +2,6 @@ package tacticalle.invtweaks.mixin;
 
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.item.ItemStack;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -19,8 +17,6 @@ import tacticalle.invtweaks.InvTweaksConfig;
  */
 @Mixin(ClientPlayerEntity.class)
 public class ClientPlayerMixin {
-    private static final Logger LOGGER = LoggerFactory.getLogger("invtweaks");
-
     @Unique
     private boolean it_throwHalfActive = false;
 
@@ -51,10 +47,10 @@ public class ClientPlayerMixin {
         int toDrop;
         if (throwAB1) {
             toDrop = count - 1; // drop all but 1
-            if (config.enableDebugLogging) LOGGER.info("[IT:THROW] allbut1 non-GUI | count={} | dropping={}", count, toDrop);
+            InvTweaksConfig.debugLog("THROW", "allbut1 non-GUI | count=%d | dropping=%d", count, toDrop);
         } else {
             toDrop = count / 2; // drop half
-            if (config.enableDebugLogging) LOGGER.info("[IT:THROW] half non-GUI | count={} | dropping={}", count, toDrop);
+            InvTweaksConfig.debugLog("THROW", "half non-GUI | count=%d | dropping=%d", count, toDrop);
         }
 
         cir.setReturnValue(true);

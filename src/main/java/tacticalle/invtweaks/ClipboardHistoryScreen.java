@@ -1,8 +1,6 @@
 package tacticalle.invtweaks;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.Element;
@@ -115,9 +113,6 @@ public class ClipboardHistoryScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-
-        // Prune expired entries on open
-        LayoutClipboard.pruneExpired();
 
         // Layout: left 45%, right 45%, with gaps
         int totalWidth = Math.min(this.width - 40, 700);
