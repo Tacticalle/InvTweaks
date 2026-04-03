@@ -1042,6 +1042,11 @@ public abstract class HandledScreenMixin {
 
     @Inject(method = "mouseScrolled", at = @At("HEAD"), cancellable = true)
     private void onMouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount, CallbackInfoReturnable<Boolean> cir) {
+        // Early exit: let vanilla handle bundle scroll selection
+        if (this.focusedSlot != null && this.focusedSlot.getStack().getItem() instanceof BundleItem) {
+            return;
+        }
+
         InvTweaksConfig.debugLog("SCROLL-RAW", "verticalAmount=%s horizontalAmount=%s", verticalAmount, horizontalAmount);
         InvTweaksConfig config = InvTweaksConfig.get();
         if (!config.enableScrollTransfer) return;

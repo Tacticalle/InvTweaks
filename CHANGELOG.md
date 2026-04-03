@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+
+### Bug Fixes
+- Fixed scroll wheel on bundles in containers triggering scroll transfer instead of vanilla bundle item selection
 ## [2.0.0] - 2026-03-30
 
 ### Modifier-Key Tweaks
