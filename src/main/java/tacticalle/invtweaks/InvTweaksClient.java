@@ -13,7 +13,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.KeyMapping;
 import com.mojang.blaze3d.platform.InputConstants;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public class InvTweaksClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("invtweaks");
@@ -32,11 +32,11 @@ public class InvTweaksClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         // Register keybind to open config screen (default: K)
-        openConfigKey = KeyMappingHelper.registerKeyBinding(new KeyMapping(
+        openConfigKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.invtweaks.open_config",
                 InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_K,
-                new KeyMapping.Category(ResourceLocation.of("category", "invtweaks"))
+                KeyMapping.Category.register(Identifier.fromNamespaceAndPath("invtweaks", "category"))
         ));
 
         // Load clipboard history from disk
@@ -50,7 +50,7 @@ public class InvTweaksClient implements ClientModInitializer {
             InvTweaksConfig cfg = InvTweaksConfig.get();
             boolean configKeyPressed = false;
             if (cfg.openConfigKey != -1) {
-                long windowHandle = client.getWindow().getHandle();
+                long windowHandle = client.getWindow().handle();
                 boolean isDown = org.lwjgl.glfw.GLFW.glfwGetKey(windowHandle, cfg.openConfigKey) == org.lwjgl.glfw.GLFW.GLFW_PRESS;
                 if (isDown && !configKeyWasDown) {
                     configKeyPressed = true;
@@ -73,14 +73,14 @@ public class InvTweaksClient implements ClientModInitializer {
                     net.minecraft.world.entity.player.Inventory inv = client.player.getInventory();
                     // Main inventory (keys 0-35) and hotbar
                     for (int i = 0; i < 36; i++) {
-                        cachedInventoryStacks.put(i, inv.getStack(i).copy());
+                        cachedInventoryStacks.put(i, inv.getItem(i).copy());
                     }
                     // Armor: inv slots 36-39
                     for (int i = 36; i <= 39; i++) {
-                        cachedInventoryStacks.put(i, inv.getStack(i).copy());
+                        cachedInventoryStacks.put(i, inv.getItem(i).copy());
                     }
                     // Offhand: inv slot 40
-                    cachedInventoryStacks.put(40, inv.getStack(40).copy());
+                    cachedInventoryStacks.put(40, inv.getItem(40).copy());
                     cachedInventoryValid = true;
                 }
 
@@ -118,7 +118,7 @@ public class InvTweaksClient implements ClientModInitializer {
         // Register overlay rendering for all AbstractContainerScreen subclasses (including InventoryScreen)
         ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
             if (screen instanceof AbstractContainerScreen<?> handledScreen) {
-                ScreenEvents.afterRender(screen).register((s, context, mouseX, mouseY, tickDelta) -> {
+                ScreenEvents.afterExtract(screen).register((s, context, mouseX, mouseY, tickDelta) -> {
                     if (HalfSelectorOverlay.isActive()) {
                         HalfSelectorOverlay.render(context, handledScreen, scaledWidth, scaledHeight);
                     }

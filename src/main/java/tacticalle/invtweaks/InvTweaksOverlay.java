@@ -2,7 +2,7 @@ package tacticalle.invtweaks;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.network.chat.Component;
@@ -53,7 +53,7 @@ public class InvTweaksOverlay {
     /**
      * Called from HandledScreenMixin (before tooltip) to draw all active messages.
      */
-    public static void render(GuiGraphics context, AbstractContainerScreen<?> screen, int screenWidth, int screenHeight) {
+    public static void render(GuiGraphicsExtractor context, AbstractContainerScreen<?> screen, int screenWidth, int screenHeight) {
         tick();
         if (activeMessages.isEmpty()) return;
 
@@ -121,7 +121,7 @@ public class InvTweaksOverlay {
             // Measure the widest line to size the background snugly
             int actualTextWidth = 0;
             for (FormattedCharSequence line : lines) {
-                int lineWidth = font.getWidth(line);
+                int lineWidth = font.width(line);
                 if (lineWidth > actualTextWidth) actualTextWidth = lineWidth;
             }
 
@@ -136,7 +136,7 @@ public class InvTweaksOverlay {
             // Draw text lines
             int textColor = (msg.color() & 0x00FFFFFF) | (alphaInt << 24);
             for (int i = 0; i < lines.size(); i++) {
-                context.drawString(font, lines.get(i), renderX, currentY + i * font.lineHeight, textColor);
+                context.text(font, lines.get(i), renderX, currentY + i * font.lineHeight, textColor);
             }
 
             currentY = bgY2 + MESSAGE_GAP;

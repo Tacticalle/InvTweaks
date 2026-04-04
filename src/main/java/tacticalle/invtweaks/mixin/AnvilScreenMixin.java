@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.AnvilScreen;
-import net.minecraft.client.input.KeyInput;
+import net.minecraft.client.input.KeyEvent;
 
 import tacticalle.invtweaks.InvTweaksConfig;
 import tacticalle.invtweaks.InvTweaksOverlay;
@@ -17,12 +17,12 @@ import tacticalle.invtweaks.InvTweaksOverlay;
 public class AnvilScreenMixin {
 
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
-    private void it_interceptClipboardKeys(KeyInput input, CallbackInfoReturnable<Boolean> cir) {
+    private void it_interceptClipboardKeys(KeyEvent input, CallbackInfoReturnable<Boolean> cir) {
         InvTweaksConfig config = InvTweaksConfig.get();
         if (!config.enableCopyPaste) return;
 
         int keyCode = input.key();
-        long windowHandle = Minecraft.getInstance().getWindow().getHandle();
+        long windowHandle = Minecraft.getInstance().getWindow().handle();
 
         boolean ctrlOrSuper = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS ||
                               GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS ||

@@ -5,7 +5,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -144,7 +144,7 @@ public class ClipboardStorage {
                                 JsonObject slotObj = slotElem.getAsJsonObject();
                                 String itemId = slotObj.get("item").getAsString();
                                 int count = slotObj.get("count").getAsInt();
-                                Item item = BuiltInRegistries.ITEM.get(ResourceLocation.of(itemId));
+                                Item item = BuiltInRegistries.ITEM.getValue(Identifier.parse(itemId));
                                 // If item doesn't exist (mod removed), use air
                                 if (item == Items.AIR && !itemId.equals("minecraft:air")) {
                                     LOGGER.warn("InvTweaks: Unknown item '{}' in clipboard history, skipping slot", itemId);

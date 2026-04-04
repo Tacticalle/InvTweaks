@@ -2,7 +2,7 @@ package tacticalle.invtweaks;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
@@ -12,9 +12,9 @@ import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.client.gui.Click;
-import net.minecraft.client.input.KeyInput;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.resources.Identifier;
 
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
@@ -70,9 +70,9 @@ public class ClipboardHistoryScreen extends Screen {
     // NOTE: These identifiers need verification against 1.21.11 vanilla assets.
     // If compilation or rendering fails, check the exact sprite paths in the game jar
     // at assets/minecraft/textures/gui/sprites/
-    private static final ResourceLocation SLOT_SPRITE = ResourceLocation.ofVanilla("container/slot");
-    private static final ResourceLocation CRAFTER_DISABLED_SLOT_SPRITE = ResourceLocation.ofVanilla("container/crafter/disabled_slot");
-    private static final ResourceLocation FURNACE_LIT_PROGRESS_SPRITE = ResourceLocation.ofVanilla("container/furnace/lit_progress");
+    private static final Identifier SLOT_SPRITE = Identifier.withDefaultNamespace("container/slot");
+    private static final Identifier CRAFTER_DISABLED_SLOT_SPRITE = Identifier.withDefaultNamespace("container/crafter/disabled_slot");
+    private static final Identifier FURNACE_LIT_PROGRESS_SPRITE = Identifier.withDefaultNamespace("container/furnace/lit_progress");
 
     /** Tracks a rendered preview slot's screen bounds and item for hover tooltip. */
     private record PreviewSlotInfo(int x, int y, int size, ItemStack stack) {}
@@ -135,21 +135,21 @@ public class ClipboardHistoryScreen extends Screen {
 
         tabAllButton = Button.builder(Component.literal("All"), button -> {
             switchTab(TAB_ALL);
-        }).dimensions(tabStartX, tabY, tabW, BUTTON_HEIGHT).build();
-        addDrawableChild(tabAllButton);
+        }).bounds(tabStartX, tabY, tabW, BUTTON_HEIGHT).build();
+        addRenderableWidget(tabAllButton);
 
         tabFavoritesButton = Button.builder(Component.literal("Favorites"), button -> {
             switchTab(TAB_FAVORITES);
-        }).dimensions(tabStartX + tabW + tabGap, tabY, tabW, BUTTON_HEIGHT).build();
-        addDrawableChild(tabFavoritesButton);
+        }).bounds(tabStartX + tabW + tabGap, tabY, tabW, BUTTON_HEIGHT).build();
+        addRenderableWidget(tabFavoritesButton);
 
         updateTabButtonStyles();
 
         // Entry list (left panel)
-        entryList = new HistoryEntryList(this.client, leftPanelWidth, panelBottom - panelTop, panelTop, ROW_HEIGHT);
+        entryList = new HistoryEntryList(this.minecraft, leftPanelWidth, panelBottom - panelTop, panelTop, ROW_HEIGHT);
         entryList.setX(leftPanelX);
         populateEntryList();
-        addDrawableChild(entryList);
+        addRenderableWidget(entryList);
 
         // Bottom buttons
         int btnY = this.height - 30;
@@ -160,10 +160,10 @@ public class ClipboardHistoryScreen extends Screen {
 
         deleteButton = Button.builder(Component.literal("Delete"), button -> {
             onDeleteButtonClicked();
-        }).dimensions(btnStartX, btnY, btnW, BUTTON_HEIGHT).build();
-        addDrawableChild(deleteButton);
+        }).bounds(btnStartX, btnY, btnW, BUTTON_HEIGHT).build();
+        addRenderableWidget(deleteButton);
 
-        addDrawableChild(Button.builder(Component.literal("Clear All"), button -> {
+        addRenderableWidget(Button.builder(Component.literal("Clear All"), button -> {
             multiSelected.clear();
             selectionAnchor = -1;
             confirmingBulkDelete = false;
@@ -172,11 +172,11 @@ public class ClipboardHistoryScreen extends Screen {
             highlightedIndex = -1;
             updateDeleteButtonText();
             rebuildEntryList();
-        }).dimensions(btnStartX + btnW + btnGap, btnY, btnW, BUTTON_HEIGHT).build());
+        }).bounds(btnStartX + btnW + btnGap, btnY, btnW, BUTTON_HEIGHT).build());
 
-        addDrawableChild(Button.builder(Component.literal("Close"), button -> {
-            close();
-        }).dimensions(btnStartX + 2 * (btnW + btnGap), btnY, btnW, BUTTON_HEIGHT).build());
+        addRenderableWidget(Button.builder(Component.literal("Close"), button -> {
+            onClose();
+        }).bounds(btnStartX + 2 * (btnW + btnGap), btnY, btnW, BUTTON_HEIGHT).build());
     }
 
     private void onDeleteButtonClicked() {
@@ -316,24 +316,24 @@ public class ClipboardHistoryScreen extends Screen {
     }
 
     private void rebuildEntryList() {
-        remove(entryList);
-        entryList = new HistoryEntryList(this.client, leftPanelWidth, panelBottom - panelTop, panelTop, ROW_HEIGHT);
+        removeWidget(entryList);
+        entryList = new HistoryEntryList(this.minecraft, leftPanelWidth, panelBottom - panelTop, panelTop, ROW_HEIGHT);
         entryList.setX(leftPanelX);
         populateEntryList();
-        addDrawableChild(entryList);
+        addRenderableWidget(entryList);
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         // Title
-        context.drawCenteredTextWithShadow(this.font, this.title, this.width / 2, 10, WHITE);
+        context.centeredText(this.font, this.title, this.width / 2, 10, WHITE);
 
         // Right panel background
         context.fill(rightPanelX - 2, panelTop - 2, rightPanelX + rightPanelWidth + 2, panelBottom + 2, PANEL_BORDER);
         context.fill(rightPanelX, panelTop, rightPanelX + rightPanelWidth, panelBottom, PANEL_BG);
 
         // Render widgets (entry list, buttons)
-        super.render(context, mouseX, mouseY, delta);
+        super.extractRenderState(context, mouseX, mouseY, delta);
 
         // Render preview on right panel
         renderPreview(context, mouseX, mouseY);
@@ -351,34 +351,34 @@ public class ClipboardHistoryScreen extends Screen {
     /**
      * Draws a vanilla slot background sprite at the given position and size.
      */
-    private void drawSlotSprite(GuiGraphics context, int x, int y, int size) {
-        context.drawGuiTexture(RenderPipelines.GUI_TEXTURED, SLOT_SPRITE, x, y, size, size);
+    private void drawSlotSprite(GuiGraphicsExtractor context, int x, int y, int size) {
+        context.blitSprite(RenderPipelines.GUI_TEXTURED, SLOT_SPRITE, x, y, size, size);
     }
 
     /**
      * Draws a vanilla crafter disabled-slot sprite at the given position and size.
      */
-    private void drawLockedSlotSprite(GuiGraphics context, int x, int y, int size) {
+    private void drawLockedSlotSprite(GuiGraphicsExtractor context, int x, int y, int size) {
         // Draw the base slot first, then the disabled overlay
         drawSlotSprite(context, x, y, size);
-        context.drawGuiTexture(RenderPipelines.GUI_TEXTURED, CRAFTER_DISABLED_SLOT_SPRITE, x, y, size, size);
+        context.blitSprite(RenderPipelines.GUI_TEXTURED, CRAFTER_DISABLED_SLOT_SPRITE, x, y, size, size);
     }
 
     /**
      * Draws an empty armor slot with its vanilla placeholder sprite (helmet/chestplate/leggings/boots/shield outline).
      */
-    private void drawEmptyArmorSlot(GuiGraphics context, int x, int y, int size, ResourceLocation emptyTexture) {
+    private void drawEmptyArmorSlot(GuiGraphicsExtractor context, int x, int y, int size, Identifier emptyTexture) {
         drawSlotSprite(context, x, y, size);
         // Scale the placeholder sprite to fit within the slot content area (1px border each side)
         int iconSize = Math.max(4, size - 2);
         int iconX = x + (size - iconSize) / 2;
         int iconY = y + (size - iconSize) / 2;
-        context.drawGuiTexture(RenderPipelines.GUI_TEXTURED, emptyTexture, iconX, iconY, iconSize, iconSize);
+        context.blitSprite(RenderPipelines.GUI_TEXTURED, emptyTexture, iconX, iconY, iconSize, iconSize);
     }
 
     // ========== Preview rendering ==========
 
-    private void renderPreview(GuiGraphics context, int mouseX, int mouseY) {
+    private void renderPreview(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         List<LayoutClipboard.HistoryEntry> history = LayoutClipboard.getHistory();
 
         // Priority: hovered entry > highlighted entry > nothing
@@ -392,7 +392,7 @@ public class ClipboardHistoryScreen extends Screen {
 
         if (realPreviewIndex < 0 || realPreviewIndex >= history.size()) {
             // Show "Hover to preview" text
-            context.drawCenteredTextWithShadow(this.font, Component.literal("Hover an entry to preview"),
+            context.centeredText(this.font, Component.literal("Hover an entry to preview"),
                     rightPanelX + rightPanelWidth / 2, panelTop + (panelBottom - panelTop) / 2, GRAY);
             return;
         }
@@ -404,12 +404,12 @@ public class ClipboardHistoryScreen extends Screen {
         List<PreviewSlotInfo> previewSlots = new ArrayList<>();
 
         // Label
-        context.drawCenteredTextWithShadow(this.font, Component.literal(entry.label),
+        context.centeredText(this.font, Component.literal(entry.label),
                 rightPanelX + rightPanelWidth / 2, panelTop + 8, WHITE);
 
         // Time info
         String timeStr = formatRelativeTime(entry.timestamp);
-        context.drawCenteredTextWithShadow(this.font, Component.literal(timeStr),
+        context.centeredText(this.font, Component.literal(timeStr),
                 rightPanelX + rightPanelWidth / 2, panelTop + 20, GRAY);
 
         // Grid starts below the header area
@@ -461,7 +461,7 @@ public class ClipboardHistoryScreen extends Screen {
         } else {
             summary = nonEmptyCount + "/" + totalSlots + " slots taken";
         }
-        context.drawCenteredTextWithShadow(this.font, Component.literal(summary),
+        context.centeredText(this.font, Component.literal(summary),
                 rightPanelX + rightPanelWidth / 2, gridBottomY + 10, DARK_GRAY);
 
         // Render hover tooltip (drawn last so it's on top of everything)
@@ -469,7 +469,7 @@ public class ClipboardHistoryScreen extends Screen {
             if (mouseX >= slotInfo.x && mouseX < slotInfo.x + slotInfo.size
                     && mouseY >= slotInfo.y && mouseY < slotInfo.y + slotInfo.size
                     && !slotInfo.stack.isEmpty()) {
-                context.drawItemTooltip(this.font, slotInfo.stack, mouseX, mouseY);
+                context.setTooltipForNextFrame(this.font, slotInfo.stack, mouseX, mouseY);
                 break;
             }
         }
@@ -477,7 +477,7 @@ public class ClipboardHistoryScreen extends Screen {
 
     // ========== Container preview (9-col standard) ==========
 
-    private int renderContainerPreview(GuiGraphics context, LayoutClipboard.LayoutSnapshot snapshot,
+    private int renderContainerPreview(GuiGraphicsExtractor context, LayoutClipboard.LayoutSnapshot snapshot,
                                        int gridY, int availableWidth, int availableHeight, int s,
                                        List<PreviewSlotInfo> previewSlots) {
         int slotCount = snapshot.slotCount;
@@ -522,7 +522,7 @@ public class ClipboardHistoryScreen extends Screen {
 
     // ========== Player inventory preview — vanilla layout ==========
 
-    private int renderPlayerInventoryPreview(GuiGraphics context, LayoutClipboard.LayoutSnapshot snapshot,
+    private int renderPlayerInventoryPreview(GuiGraphicsExtractor context, LayoutClipboard.LayoutSnapshot snapshot,
                                               int gridY, int availableWidth, int availableHeight, int s,
                                               List<PreviewSlotInfo> previewSlots) {
         int gap = Math.max(2, (int)(4 * PREVIEW_SCALE));
@@ -558,11 +558,11 @@ public class ClipboardHistoryScreen extends Screen {
 
         // --- Armor column (uniform spacing, no hotbar gap) ---
         int armorY = gridY;
-        ResourceLocation[] armorSprites = {
-            InventoryMenu.EMPTY_HELMET_SLOT_TEXTURE,
-            InventoryMenu.EMPTY_CHESTPLATE_SLOT_TEXTURE,
-            InventoryMenu.EMPTY_LEGGINGS_SLOT_TEXTURE,
-            InventoryMenu.EMPTY_BOOTS_SLOT_TEXTURE
+        Identifier[] armorSprites = {
+            InventoryMenu.EMPTY_ARMOR_SLOT_HELMET,
+            InventoryMenu.EMPTY_ARMOR_SLOT_CHESTPLATE,
+            InventoryMenu.EMPTY_ARMOR_SLOT_LEGGINGS,
+            InventoryMenu.EMPTY_ARMOR_SLOT_BOOTS
         };
         int[] armorKeys = {36, 37, 38, 39};
         for (int i = 0; i < 4; i++) {
@@ -582,7 +582,7 @@ public class ClipboardHistoryScreen extends Screen {
         LayoutClipboard.SlotData offhandSd = snapshot.slots.get(40);
         boolean offhandEmpty = (offhandSd == null || offhandSd.item() == null);
         if (offhandEmpty) {
-            drawEmptyArmorSlot(context, offhandX, offhandY, s, InventoryMenu.EMPTY_OFF_HAND_SLOT_TEXTURE);
+            drawEmptyArmorSlot(context, offhandX, offhandY, s, InventoryMenu.EMPTY_ARMOR_SLOT_SHIELD);
         } else {
             renderPreviewSlot(context, offhandSd, offhandX, offhandY, s, previewSlots);
         }
@@ -606,7 +606,7 @@ public class ClipboardHistoryScreen extends Screen {
 
     // ========== Grid9 preview (3×3, e.g. crafter/dispenser) ==========
 
-    private int renderGrid9Preview(GuiGraphics context, LayoutClipboard.LayoutSnapshot snapshot,
+    private int renderGrid9Preview(GuiGraphicsExtractor context, LayoutClipboard.LayoutSnapshot snapshot,
                                     int gridY, int availableWidth, int availableHeight, int s,
                                     List<PreviewSlotInfo> previewSlots) {
         int cols = 3;
@@ -640,7 +640,7 @@ public class ClipboardHistoryScreen extends Screen {
 
     // ========== Hopper5 preview (5×1) ==========
 
-    private int renderHopper5Preview(GuiGraphics context, LayoutClipboard.LayoutSnapshot snapshot,
+    private int renderHopper5Preview(GuiGraphicsExtractor context, LayoutClipboard.LayoutSnapshot snapshot,
                                       int gridY, int availableWidth, int availableHeight, int s,
                                       List<PreviewSlotInfo> previewSlots) {
         int cols = 5;
@@ -667,7 +667,7 @@ public class ClipboardHistoryScreen extends Screen {
 
     // ========== Furnace2 preview (vertical: input on top, fuel on bottom) ==========
 
-    private int renderFurnace2Preview(GuiGraphics context, LayoutClipboard.LayoutSnapshot snapshot,
+    private int renderFurnace2Preview(GuiGraphicsExtractor context, LayoutClipboard.LayoutSnapshot snapshot,
                                        int gridY, int availableWidth, int availableHeight, int s,
                                        List<PreviewSlotInfo> previewSlots) {
         // 1 column, 2 rows with a slot-sized gap between (fire icon space)
@@ -690,7 +690,7 @@ public class ClipboardHistoryScreen extends Screen {
         int fireSize = Math.max(4, (int)(slotSize * 0.7));
         int fireX = gridX + (slotSize - fireSize) / 2;
         int fireY = gridY + slotSize + (fireGap - fireSize) / 2;
-        context.drawGuiTexture(RenderPipelines.GUI_TEXTURED, FURNACE_LIT_PROGRESS_SPRITE, fireX, fireY, fireSize, fireSize);
+        context.blitSprite(RenderPipelines.GUI_TEXTURED, FURNACE_LIT_PROGRESS_SPRITE, fireX, fireY, fireSize, fireSize);
 
         // Fuel slot (bottom, after fire gap)
         renderPreviewSlot(context, snapshot.slots.get(1), gridX, gridY + slotSize + fireGap, slotSize, previewSlots);
@@ -700,7 +700,7 @@ public class ClipboardHistoryScreen extends Screen {
 
     // ========== Bundle preview (dynamic grid) ==========
 
-    private int renderBundlePreview(GuiGraphics context, LayoutClipboard.LayoutSnapshot snapshot,
+    private int renderBundlePreview(GuiGraphicsExtractor context, LayoutClipboard.LayoutSnapshot snapshot,
                                      LayoutClipboard.HistoryEntry entry, int gridY,
                                      int availableWidth, int availableHeight, int s,
                                      List<PreviewSlotInfo> previewSlots) {
@@ -739,7 +739,7 @@ public class ClipboardHistoryScreen extends Screen {
     /**
      * Draw a dark slot background for bundle preview (matches vanilla bundle tooltip style).
      */
-    private void drawBundleSlotBackground(GuiGraphics context, int x, int y, int size) {
+    private void drawBundleSlotBackground(GuiGraphicsExtractor context, int x, int y, int size) {
         context.fill(x, y, x + size, y + size, 0xFF404044); // subtle grey border
         context.fill(x + 1, y + 1, x + size - 1, y + size - 1, 0xFF2C2C2E); // dark grey fill
     }
@@ -747,7 +747,7 @@ public class ClipboardHistoryScreen extends Screen {
     /**
      * Render a single slot in the bundle preview with dark tooltip-style background.
      */
-    private void renderBundlePreviewSlot(GuiGraphics context, LayoutClipboard.SlotData sd, int sx, int sy, int slotSize,
+    private void renderBundlePreviewSlot(GuiGraphicsExtractor context, LayoutClipboard.SlotData sd, int sx, int sy, int slotSize,
                                           List<PreviewSlotInfo> previewSlots) {
         boolean empty = (sd == null || sd.item() == null);
 
@@ -757,12 +757,12 @@ public class ClipboardHistoryScreen extends Screen {
             ItemStack displayStack = LayoutClipboard.reconstructStack(sd.item(), sd.count(), sd.components());
 
             float itemScale = (float)(slotSize - 2) / NATIVE_ITEM_SIZE;
-            var matrices = context.getMatrices();
+            var matrices = context.pose();
             matrices.pushMatrix();
             matrices.translate((float)(sx + 1), (float)(sy + 1));
             matrices.scale(itemScale, itemScale);
-            context.drawItem(displayStack, 0, 0);
-            context.drawStackOverlay(this.font, displayStack, 0, 0);
+            context.item(displayStack, 0, 0);
+            context.itemDecorations(this.font, displayStack, 0, 0);
             matrices.popMatrix();
 
             if (previewSlots != null) {
@@ -776,7 +776,7 @@ public class ClipboardHistoryScreen extends Screen {
     /**
      * Draws a container background (gray panel with border) behind a grid area.
      */
-    private void drawContainerBackground(GuiGraphics context, int gridX, int gridY, int gridWidth, int gridHeight) {
+    private void drawContainerBackground(GuiGraphicsExtractor context, int gridX, int gridY, int gridWidth, int gridHeight) {
         context.fill(gridX - 4, gridY - 4, gridX + gridWidth + 4, gridY + gridHeight + 4, PANEL_BORDER);
         context.fill(gridX - 3, gridY - 3, gridX + gridWidth + 3, gridY + gridHeight + 3, 0xFFC6C6C6);
     }
@@ -788,7 +788,7 @@ public class ClipboardHistoryScreen extends Screen {
      *
      * If previewSlots is non-null, the slot info is recorded for hover tooltip detection.
      */
-    private void renderPreviewSlot(GuiGraphics context, LayoutClipboard.SlotData sd, int sx, int sy, int slotSize,
+    private void renderPreviewSlot(GuiGraphicsExtractor context, LayoutClipboard.SlotData sd, int sx, int sy, int slotSize,
                                     List<PreviewSlotInfo> previewSlots) {
         boolean empty = (sd == null || sd.item() == null);
 
@@ -801,12 +801,12 @@ public class ClipboardHistoryScreen extends Screen {
 
             // Scale item and overlays to fit within slot content area (1px border each side)
             float itemScale = (float)(slotSize - 2) / NATIVE_ITEM_SIZE;
-            var matrices = context.getMatrices();
+            var matrices = context.pose();
             matrices.pushMatrix();
             matrices.translate((float)(sx + 1), (float)(sy + 1));
             matrices.scale(itemScale, itemScale);
-            context.drawItem(displayStack, 0, 0);
-            context.drawStackOverlay(this.font, displayStack, 0, 0);
+            context.item(displayStack, 0, 0);
+            context.itemDecorations(this.font, displayStack, 0, 0);
             matrices.popMatrix();
 
             // Track for tooltip — use the full slot bounds for hit testing
@@ -831,31 +831,31 @@ public class ClipboardHistoryScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(KeyInput input) {
+    public boolean keyPressed(KeyEvent input) {
         int keyCode = input.key();
 
         // ESC always closes
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            close();
+            onClose();
             return true;
         }
 
         // E closes (inventory key)
         if (keyCode == GLFW.GLFW_KEY_E) {
-            close();
+            onClose();
             return true;
         }
 
         // Shift+Tab or custom clipboard history key closes
         InvTweaksConfig config = InvTweaksConfig.get();
         if (config.clipboardHistoryKey == -1) {
-            if (input.hasShift() && keyCode == GLFW.GLFW_KEY_TAB) {
-                close();
+            if (input.hasShiftDown() && keyCode == GLFW.GLFW_KEY_TAB) {
+                onClose();
                 return true;
             }
         } else {
             if (keyCode == config.clipboardHistoryKey) {
-                close();
+                onClose();
                 return true;
             }
         }
@@ -864,14 +864,14 @@ public class ClipboardHistoryScreen extends Screen {
     }
 
     @Override
-    public void close() {
-        if (client != null) client.setScreen(parentScreen);
+    public void onClose() {
+        if (minecraft != null) minecraft.setScreen(parentScreen);
     }
 
     // ========== Modifier key helpers (GLFW-based, not Screen.hasXxxDown) ==========
 
     private static boolean isCtrlOrCmdHeld() {
-        long wh = Minecraft.getInstance().getWindow().getHandle();
+        long wh = Minecraft.getInstance().getWindow().handle();
         return GLFW.glfwGetKey(wh, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS
             || GLFW.glfwGetKey(wh, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS
             || GLFW.glfwGetKey(wh, GLFW.GLFW_KEY_LEFT_SUPER) == GLFW.GLFW_PRESS
@@ -879,7 +879,7 @@ public class ClipboardHistoryScreen extends Screen {
     }
 
     private static boolean isShiftHeld() {
-        long wh = Minecraft.getInstance().getWindow().getHandle();
+        long wh = Minecraft.getInstance().getWindow().handle();
         return GLFW.glfwGetKey(wh, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS
             || GLFW.glfwGetKey(wh, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
     }
@@ -901,7 +901,7 @@ public class ClipboardHistoryScreen extends Screen {
         }
 
         @Override
-        protected int getScrollbarX() {
+        protected int scrollBarX() {
             return leftPanelX + leftPanelWidth - 6;
         }
     }
@@ -930,11 +930,11 @@ public class ClipboardHistoryScreen extends Screen {
             this.selectBtn = Button.builder(Component.literal("Select"), button -> {
                 LayoutClipboard.setActiveIndex(realIndex);
                 rebuildEntryList();
-            }).dimensions(0, 0, 50, BUTTON_HEIGHT).build();
+            }).bounds(0, 0, 50, BUTTON_HEIGHT).build();
         }
 
         @Override
-        public void render(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float delta) {
+        public void extractContent(GuiGraphicsExtractor context, int mouseX, int mouseY, boolean hovered, float delta) {
             int x = getX();
             int y = getY();
             int w = getWidth();
@@ -958,7 +958,7 @@ public class ClipboardHistoryScreen extends Screen {
             // Star icon (left side)
             String starChar = entry.favorited ? "\u2605" : "\u2606";
             int starColor = entry.favorited ? GOLD : STAR_GRAY;
-            context.drawString(font, Component.literal(starChar), x, y + 2, starColor);
+            context.text(font, Component.literal(starChar), x, y + 2, starColor);
 
             int labelX = x + STAR_WIDTH;
 
@@ -975,21 +975,21 @@ public class ClipboardHistoryScreen extends Screen {
             String label = prefix + entry.label;
 
             int availableLabelWidth = w - selectBtn.getWidth() - 6 - STAR_WIDTH;
-            String displayLabel = font.trimToWidth(label, availableLabelWidth);
-            context.drawString(font, Component.literal(displayLabel), labelX, y + 2, textColor);
+            String displayLabel = font.plainSubstrByWidth(label, availableLabelWidth);
+            context.text(font, Component.literal(displayLabel), labelX, y + 2, textColor);
 
             // Time
             String timeStr = formatRelativeTime(entry.timestamp);
-            context.drawString(font, Component.literal("  " + timeStr), labelX, y + 14, DARK_GRAY);
+            context.text(font, Component.literal("  " + timeStr), labelX, y + 14, DARK_GRAY);
 
             // Select button
             selectBtn.setX(x + w - selectBtn.getWidth());
             selectBtn.setY(y + 2);
-            selectBtn.render(context, mouseX, mouseY, delta);
+            selectBtn.extractRenderState(context, mouseX, mouseY, delta);
         }
 
         @Override
-        public boolean mouseClicked(Click click, boolean focused) {
+        public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
             // Check if Select button was clicked first
             if (selectBtn.mouseClicked(click, focused)) {
                 return true;
@@ -1059,8 +1059,8 @@ public class ClipboardHistoryScreen extends Screen {
 
     private class EmptyEntry extends HistoryListEntry {
         @Override
-        public void render(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float delta) {
-            context.drawCenteredTextWithShadow(font, Component.literal("No clipboard history"),
+        public void extractContent(GuiGraphicsExtractor context, int mouseX, int mouseY, boolean hovered, float delta) {
+            context.centeredText(font, Component.literal("No clipboard history"),
                     leftPanelX + leftPanelWidth / 2, getY() + 6, GRAY);
         }
 
