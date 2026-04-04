@@ -10,6 +10,7 @@ import net.minecraft.screen.FurnaceScreenHandler;
 import net.minecraft.screen.BlastFurnaceScreenHandler;
 import net.minecraft.screen.ShulkerBoxScreenHandler;
 import net.minecraft.screen.SmokerScreenHandler;
+import net.minecraft.text.Text;
 
 /**
  * Classifies a container's ScreenHandler into a category.
@@ -21,7 +22,8 @@ import net.minecraft.screen.SmokerScreenHandler;
 public class ContainerClassifier {
 
     public enum ContainerCategory {
-        STANDARD,       // GenericContainerScreenHandler — chests, barrels, ender chests, shulker boxes (27 or 54 slots)
+        STANDARD,       // GenericContainerScreenHandler — chests, barrels, shulker boxes (27 or 54 slots)
+        ENDER_CHEST,    // GenericContainerScreenHandler with ender chest title — separate clipboard tracking
         GRID9,          // Generic3x3ContainerScreenHandler — dispensers, droppers
         CRAFTER,        // CrafterScreenHandler — crafter (3x3 with lockable slots)
         CRAFTING_TABLE, // CraftingScreenHandler — crafting table (9 input + 1 output)
@@ -32,10 +34,18 @@ public class ContainerClassifier {
     }
 
     /**
-     * Classify a ScreenHandler into a ContainerCategory.
+     * Classify a ScreenHandler into a ContainerCategory (without title — no ender chest detection).
      * PLAYER_ONLY is detected separately (caller checks isPlayerOnly before calling this).
      */
     public static ContainerCategory classifyContainer(ScreenHandler handler) {
+        return classifyContainer(handler, null);
+    }
+
+    /**
+     * Classify a ScreenHandler into a ContainerCategory, using the screen title
+     * to distinguish ender chests from regular chests.
+     */
+    public static ContainerCategory classifyContainer(ScreenHandler handler, Text title) {
         if (handler == null) {
             return ContainerCategory.INCOMPATIBLE;
         }
@@ -45,6 +55,14 @@ public class ContainerClassifier {
             return ContainerCategory.STANDARD;
         }
         if (handler instanceof GenericContainerScreenHandler) {
+            // Check for ender chest by screen title
+            if (title != null) {
+                String titleString = title.getString();
+                String enderChestTitle = Text.translatable("container.enderchest").getString();
+                if (titleString.equals(enderChestTitle)) {
+                    return ContainerCategory.ENDER_CHEST;
+                }
+            }
             return ContainerCategory.STANDARD;
         }
         if (handler instanceof Generic3x3ContainerScreenHandler) {
@@ -78,6 +96,7 @@ public class ContainerClassifier {
     public static String getCategoryName(ContainerCategory category) {
         return switch (category) {
             case STANDARD -> "STANDARD";
+            case ENDER_CHEST -> "ENDER_CHEST";
             case GRID9 -> "GRID9";
             case CRAFTER -> "CRAFTER";
             case CRAFTING_TABLE -> "CRAFTING_TABLE";

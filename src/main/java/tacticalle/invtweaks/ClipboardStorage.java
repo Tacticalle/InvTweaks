@@ -36,6 +36,7 @@ public class ClipboardStorage {
             root.addProperty("activeGrid9Index", LayoutClipboard.getActiveGrid9Index());
             root.addProperty("activeHopper5Index", LayoutClipboard.getActiveHopper5Index());
             root.addProperty("activeFurnace2Index", LayoutClipboard.getActiveFurnace2Index());
+            root.addProperty("activeEnderChestIndex", LayoutClipboard.getActiveEnderChestIndex());
 
             JsonArray historyArray = new JsonArray();
             for (LayoutClipboard.HistoryEntry entry : LayoutClipboard.getHistory()) {
@@ -115,6 +116,7 @@ public class ClipboardStorage {
             int activeGrid9Index = root.has("activeGrid9Index") ? root.get("activeGrid9Index").getAsInt() : -1;
             int activeHopper5Index = root.has("activeHopper5Index") ? root.get("activeHopper5Index").getAsInt() : -1;
             int activeFurnace2Index = root.has("activeFurnace2Index") ? root.get("activeFurnace2Index").getAsInt() : -1;
+            int activeEnderChestIndex = root.has("activeEnderChestIndex") ? root.get("activeEnderChestIndex").getAsInt() : -1;
 
             List<LayoutClipboard.HistoryEntry> entries = new ArrayList<>();
             JsonArray historyArray = root.getAsJsonArray("history");
@@ -170,7 +172,7 @@ public class ClipboardStorage {
                 }
             }
 
-            LayoutClipboard.loadFromStorage(entries, activeContainerIndex, activePlayerIndex, activeBundleIndex, activeGrid9Index, activeHopper5Index, activeFurnace2Index);
+            LayoutClipboard.loadFromStorage(entries, activeContainerIndex, activePlayerIndex, activeBundleIndex, activeGrid9Index, activeHopper5Index, activeFurnace2Index, activeEnderChestIndex);
             LOGGER.info("InvTweaks: Loaded {} clipboard history entries from disk", entries.size());
         } catch (Exception e) {
             LOGGER.error("InvTweaks: Failed to load clipboard history", e);

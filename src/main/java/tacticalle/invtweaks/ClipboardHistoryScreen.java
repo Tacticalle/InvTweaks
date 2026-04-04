@@ -54,6 +54,7 @@ public class ClipboardHistoryScreen extends Screen {
     private static final int GREEN = 0xFF55FF55;
     private static final int RED = 0xFFFF5555;
     private static final int ORANGE = 0xFFFFAA00;
+    private static final int TEAL = 0xFF2DD2C8;
 
     private static final int PANEL_BG = 0xFF2B2B2B;
     private static final int PANEL_BORDER = 0xFF555555;
@@ -965,6 +966,8 @@ public class ClipboardHistoryScreen extends Screen {
             int textColor;
             if (entry.isBundle()) {
                 textColor = entry.bundleColor != -1 ? (0xFF000000 | entry.bundleColor) : ORANGE;
+            } else if (LayoutClipboard.isEnderChestEntry(entry)) {
+                textColor = TEAL;
             } else {
                 textColor = entry.snapshot.isPlayerInventory ? AQUA : YELLOW;
             }

@@ -622,7 +622,8 @@ public abstract class HandledScreenMixin {
         // ========== CONTAINER CLASSIFICATION + INCOMPATIBLE BLOCKING ==========
         if (!isPlayerOnly) {
             if (it_containerCategory == null) {
-                it_containerCategory = ContainerClassifier.classifyContainer(handler);
+                net.minecraft.text.Text screenTitle = ((net.minecraft.client.gui.screen.Screen)(Object)this).getTitle();
+                it_containerCategory = ContainerClassifier.classifyContainer(handler, screenTitle);
                 InvTweaksConfig.debugLog("CLASSIFY", "%s \u2192 %s",
                         handler.getClass().getSimpleName(),
                         ContainerClassifier.getCategoryName(it_containerCategory));

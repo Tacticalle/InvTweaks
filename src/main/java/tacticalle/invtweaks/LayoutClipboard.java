@@ -10,7 +10,11 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.component.Component;
+import net.minecraft.component.ComponentMap;
+import net.minecraft.component.ComponentType;
 import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.ContainerComponent;
 import net.minecraft.component.type.DyedColorComponent;
 import net.minecraft.component.type.BundleContentsComponent;
 import net.minecraft.component.type.EquippableComponent;
@@ -37,6 +41,23 @@ public class LayoutClipboard {
 
     /** Component strings that have already failed reconstruction — log once, then suppress. */
     private static final Set<String> failedComponentStrings = new HashSet<>();
+
+    /**
+     * State components — these change during normal gameplay and should be stripped
+     * when comparing item identity. Everything NOT in this set is identity.
+     */
+    private static final Set<ComponentType<?>> STATE_COMPONENTS = Set.of(
+        DataComponentTypes.DAMAGE,
+        DataComponentTypes.CONTAINER,
+        DataComponentTypes.BUNDLE_CONTENTS,
+        DataComponentTypes.CHARGED_PROJECTILES,
+        DataComponentTypes.REPAIR_COST,
+        DataComponentTypes.MAP_DECORATIONS,
+        DataComponentTypes.MAP_POST_PROCESSING,
+        DataComponentTypes.DEBUG_STICK_STATE,
+        DataComponentTypes.WRITABLE_BOOK_CONTENT,
+        DataComponentTypes.CONTAINER_LOOT
+    );
 
     /**
      * A snapshot of one slot's contents.
@@ -510,6 +531,7 @@ public class LayoutClipboard {
     private static int activeGrid9Index = -1;
     private static int activeHopper5Index = -1;
     private static int activeFurnace2Index = -1;
+    private static int activeEnderChestIndex = -1;
 
     // ========== HISTORY ACCESS ==========
 
@@ -577,6 +599,16 @@ public class LayoutClipboard {
         }
     }
 
+    public static int getActiveEnderChestIndex() {
+        return activeEnderChestIndex;
+    }
+
+    public static void setActiveEnderChestIndex(int index) {
+        if (index >= -1 && index < history.size()) {
+            activeEnderChestIndex = index;
+        }
+    }
+
     /**
      * Set the active index for the given history entry (auto-detects type).
      */
@@ -598,6 +630,9 @@ public class LayoutClipboard {
         } else if (TYPE_FURNACE2.equals(entry.entryType)) {
             activeFurnace2Index = index;
             InvTweaksConfig.debugLog("CLIPBOARD", "setActiveIndex: furnace2=%d label=%s", index, entry.label);
+        } else if (isEnderChestEntry(entry)) {
+            activeEnderChestIndex = index;
+            InvTweaksConfig.debugLog("CLIPBOARD", "setActiveIndex: enderchest=%d label=%s", index, entry.label);
         } else {
             activeContainerIndex = index;
             InvTweaksConfig.debugLog("CLIPBOARD", "setActiveIndex: container=%d label=%s", index, entry.label);
@@ -639,6 +674,11 @@ public class LayoutClipboard {
         } else if (activeFurnace2Index > index) {
             activeFurnace2Index--;
         }
+        if (activeEnderChestIndex == index) {
+            activeEnderChestIndex = -1;
+        } else if (activeEnderChestIndex > index) {
+            activeEnderChestIndex--;
+        }
         ClipboardStorage.save();
     }
 
@@ -650,6 +690,7 @@ public class LayoutClipboard {
         activeGrid9Index = -1;
         activeHopper5Index = -1;
         activeFurnace2Index = -1;
+        activeEnderChestIndex = -1;
         ClipboardStorage.save();
     }
 
@@ -677,6 +718,8 @@ public class LayoutClipboard {
             else if (activeHopper5Index > idx) activeHopper5Index--;
             if (activeFurnace2Index == idx) activeFurnace2Index = -1;
             else if (activeFurnace2Index > idx) activeFurnace2Index--;
+            if (activeEnderChestIndex == idx) activeEnderChestIndex = -1;
+            else if (activeEnderChestIndex > idx) activeEnderChestIndex--;
         }
         ClipboardStorage.save();
     }
@@ -718,6 +761,14 @@ public class LayoutClipboard {
      * Add an entry to the front of the history list and prune if needed.
      */
     public static void addToHistory(HistoryEntry entry) {
+        addToHistory(entry, null);
+    }
+
+    /**
+     * Add an entry to the front of the history list and prune if needed.
+     * @param category optional category hint for ender chest distinction
+     */
+    public static void addToHistory(HistoryEntry entry, ContainerClassifier.ContainerCategory category) {
         history.add(0, entry);
 
         // Shift active indices since we inserted at 0
@@ -727,9 +778,12 @@ public class LayoutClipboard {
         if (activeGrid9Index >= 0) activeGrid9Index++;
         if (activeHopper5Index >= 0) activeHopper5Index++;
         if (activeFurnace2Index >= 0) activeFurnace2Index++;
+        if (activeEnderChestIndex >= 0) activeEnderChestIndex++;
 
         // Set the new entry as active for its type
-        if (entry.isBundle()) {
+        if (category == ContainerClassifier.ContainerCategory.ENDER_CHEST) {
+            activeEnderChestIndex = 0;
+        } else if (entry.isBundle()) {
             activeBundleIndex = 0;
         } else if (entry.snapshot.isPlayerInventory) {
             activePlayerIndex = 0;
@@ -739,6 +793,8 @@ public class LayoutClipboard {
             activeHopper5Index = 0;
         } else if (TYPE_FURNACE2.equals(entry.entryType)) {
             activeFurnace2Index = 0;
+        } else if (isEnderChestEntry(entry)) {
+            activeEnderChestIndex = 0;
         } else {
             activeContainerIndex = 0;
         }
@@ -770,6 +826,8 @@ public class LayoutClipboard {
             else if (activeHopper5Index > removeIdx) activeHopper5Index--;
             if (activeFurnace2Index == removeIdx) activeFurnace2Index = -1;
             else if (activeFurnace2Index > removeIdx) activeFurnace2Index--;
+            if (activeEnderChestIndex == removeIdx) activeEnderChestIndex = -1;
+            else if (activeEnderChestIndex > removeIdx) activeEnderChestIndex--;
             history.remove(removeIdx);
             unfavoritedCount--;
         }
@@ -829,6 +887,11 @@ public class LayoutClipboard {
 
     public static void loadFromStorage(List<HistoryEntry> entries, int containerIdx, int playerIdx, int bundleIdx,
                                         int grid9Idx, int hopper5Idx, int furnace2Idx) {
+        loadFromStorage(entries, containerIdx, playerIdx, bundleIdx, grid9Idx, hopper5Idx, furnace2Idx, -1);
+    }
+
+    public static void loadFromStorage(List<HistoryEntry> entries, int containerIdx, int playerIdx, int bundleIdx,
+                                        int grid9Idx, int hopper5Idx, int furnace2Idx, int enderChestIdx) {
         history.clear();
         history.addAll(entries);
         activeContainerIndex = containerIdx;
@@ -844,6 +907,7 @@ public class LayoutClipboard {
         activeGrid9Index = grid9Idx;
         activeHopper5Index = hopper5Idx;
         activeFurnace2Index = furnace2Idx;
+        activeEnderChestIndex = enderChestIdx;
     }
 
     // ========== COMPONENT SERIALIZATION ==========
@@ -900,6 +964,169 @@ public class LayoutClipboard {
             }
         }
         return new ItemStack(item, count);
+    }
+
+    // ========== CONTENT-SIMILARITY MATCHING ==========
+
+    /**
+     * Check if two ItemStacks are identity-matches: same item type and same identity components
+     * (all components except state components match).
+     *
+     * Both stacks must be non-empty and the same item type. Returns false if either side
+     * has null/missing component data (can't compare identity without it).
+     */
+    private static boolean isIdentityMatch(ItemStack clipboardStack, ItemStack liveStack) {
+        if (clipboardStack.isEmpty() || liveStack.isEmpty()) return false;
+        if (clipboardStack.getItem() != liveStack.getItem()) return false;
+
+        ComponentMap clipMap = clipboardStack.getComponents();
+        ComponentMap liveMap = liveStack.getComponents();
+
+        // Collect all non-state component types from both sides
+        Set<ComponentType<?>> allIdentityTypes = new HashSet<>();
+        for (ComponentType<?> type : clipMap.getTypes()) {
+            if (!STATE_COMPONENTS.contains(type)) allIdentityTypes.add(type);
+        }
+        for (ComponentType<?> type : liveMap.getTypes()) {
+            if (!STATE_COMPONENTS.contains(type)) allIdentityTypes.add(type);
+        }
+
+        // Compare each identity component — must be present and equal on both sides
+        for (ComponentType<?> type : allIdentityTypes) {
+            Object clipVal = clipMap.get(type);
+            Object liveVal = liveMap.get(type);
+            if (!Objects.equals(clipVal, liveVal)) return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if a clipboard SlotData identity-matches a live ItemStack.
+     * Reconstructs the clipboard stack from its serialized components for comparison.
+     *
+     * Returns false if the clipboard SlotData has no component data (null = old pre-component entry,
+     * can't do identity comparison).
+     */
+    private static boolean isIdentityMatch(SlotData clipboardSlot, ItemStack liveStack) {
+        if (clipboardSlot == null || clipboardSlot.item() == null) return false;
+        if (clipboardSlot.components() == null) return false; // Old entry — no component data
+        if (liveStack.isEmpty() || liveStack.getItem() != clipboardSlot.item()) return false;
+
+        // "" means no custom components — identity match degenerates to type-only
+        // (all identity components are defaults, which match if types match)
+        if (clipboardSlot.components().isEmpty()) {
+            // Reconstructed stack has only defaults. Check if live stack also has only defaults for identity components.
+            ItemStack defaultStack = new ItemStack(clipboardSlot.item(), clipboardSlot.count());
+            return isIdentityMatch(defaultStack, liveStack);
+        }
+
+        ItemStack clipStack = reconstructStack(clipboardSlot.item(), clipboardSlot.count(), clipboardSlot.components());
+        return isIdentityMatch(clipStack, liveStack);
+    }
+
+    /**
+     * Check if a clipboard SlotData and a live ItemStack have matching CUSTOM_NAME and same item type.
+     * For use in the name+type tier (tier 4-5).
+     *
+     * Both must have CUSTOM_NAME present and the names must be equal (exact Text match including formatting).
+     */
+    private static boolean isNameAndTypeMatch(SlotData clipboardSlot, ItemStack liveStack) {
+        if (clipboardSlot == null || clipboardSlot.item() == null) return false;
+        if (liveStack.isEmpty() || liveStack.getItem() != clipboardSlot.item()) return false;
+        if (clipboardSlot.components() == null) return false; // Need component data to check name
+
+        // Reconstruct clipboard stack to read CUSTOM_NAME
+        ItemStack clipStack = reconstructStack(clipboardSlot.item(), clipboardSlot.count(), clipboardSlot.components());
+        if (!clipStack.contains(DataComponentTypes.CUSTOM_NAME)) return false;
+        if (!liveStack.contains(DataComponentTypes.CUSTOM_NAME)) return false;
+
+        Text clipName = clipStack.get(DataComponentTypes.CUSTOM_NAME);
+        Text liveName = liveStack.get(DataComponentTypes.CUSTOM_NAME);
+        return Objects.equals(clipName, liveName);
+    }
+
+    /**
+     * Extract the set of distinct Item types contained inside a container or bundle ItemStack.
+     * Returns an empty set if the stack has neither CONTAINER nor BUNDLE_CONTENTS.
+     */
+    private static Set<Item> extractContainedItemTypes(ItemStack stack) {
+        Set<Item> types = new HashSet<>();
+
+        // Check for shulker box contents (CONTAINER component)
+        ContainerComponent container = stack.get(DataComponentTypes.CONTAINER);
+        if (container != null) {
+            for (ItemStack inner : container.iterateNonEmpty()) {
+                types.add(inner.getItem());
+            }
+        }
+
+        // Check for bundle contents (BUNDLE_CONTENTS component)
+        BundleContentsComponent bundle = stack.get(DataComponentTypes.BUNDLE_CONTENTS);
+        if (bundle != null) {
+            for (ItemStack inner : bundle.iterate()) {
+                if (!inner.isEmpty()) {
+                    types.add(inner.getItem());
+                }
+            }
+        }
+
+        return types;
+    }
+
+    /**
+     * Check if two container/bundle items are content-similar.
+     * Content-similar means: at least 1 overlapping item type AND no more than 50% of
+     * the clipboard's item types are missing from the live container.
+     *
+     * Both stacks must be the same item type and at least one must have CONTAINER or BUNDLE_CONTENTS.
+     * Returns false if the clipboard container was empty (nothing to compare).
+     */
+    private static boolean isContentSimilar(ItemStack clipboardStack, ItemStack liveStack) {
+        Set<Item> clipboardTypes = extractContainedItemTypes(clipboardStack);
+        Set<Item> liveTypes = extractContainedItemTypes(liveStack);
+
+        if (clipboardTypes.isEmpty()) return false; // Clipboard container was empty — can't content-match
+
+        Set<Item> overlap = new HashSet<>(clipboardTypes);
+        overlap.retainAll(liveTypes);
+
+        if (overlap.isEmpty()) return false; // No item types in common
+
+        int missing = clipboardTypes.size() - overlap.size();
+        int maxMissing = (int) Math.floor(clipboardTypes.size() * 0.50);
+
+        return missing <= maxMissing;
+    }
+
+    /**
+     * Check if a clipboard SlotData is content-similar to a live ItemStack.
+     * Reconstructs the clipboard stack to read its container/bundle contents.
+     */
+    private static boolean isContentSimilar(SlotData clipboardSlot, ItemStack liveStack) {
+        if (clipboardSlot == null || clipboardSlot.item() == null) return false;
+        if (clipboardSlot.components() == null) return false;
+        if (liveStack.isEmpty() || liveStack.getItem() != clipboardSlot.item()) return false;
+
+        ItemStack clipStack = reconstructStack(clipboardSlot.item(), clipboardSlot.count(), clipboardSlot.components());
+        return isContentSimilar(clipStack, liveStack);
+    }
+
+    /**
+     * Check if a stack is a container/bundle type (has CONTAINER or BUNDLE_CONTENTS).
+     */
+    private static boolean isContainerOrBundle(ItemStack stack) {
+        return stack.contains(DataComponentTypes.CONTAINER) || stack.contains(DataComponentTypes.BUNDLE_CONTENTS);
+    }
+
+    /**
+     * Check if a SlotData represents a container/bundle type (by reconstructing and checking).
+     * Returns false for null, empty, or old entries without component data.
+     */
+    private static boolean isContainerOrBundle(SlotData sd) {
+        if (sd == null || sd.item() == null || sd.components() == null) return false;
+        ItemStack stack = reconstructStack(sd.item(), sd.count(), sd.components());
+        return isContainerOrBundle(stack);
     }
 
     // ========== DEDUPLICATION ==========
@@ -1002,16 +1229,32 @@ public class LayoutClipboard {
         } else if (activeFurnace2Index > dupIndex) {
             activeFurnace2Index--;
         }
+        if (activeEnderChestIndex == dupIndex) {
+            activeEnderChestIndex = -1;
+        } else if (activeEnderChestIndex > dupIndex) {
+            activeEnderChestIndex--;
+        }
     }
 
     // ========== CONTAINER CATEGORY HELPERS ==========
+
+    /**
+     * Check if a history entry is an ender chest entry by its containerTitle.
+     * Ender chest entries use TYPE_CONTAINER for entryType but are distinguished by title.
+     */
+    public static boolean isEnderChestEntry(HistoryEntry entry) {
+        if (entry == null || entry.containerTitle == null) return false;
+        if (!TYPE_CONTAINER.equals(entry.entryType)) return false;
+        String enderChestTitle = net.minecraft.text.Text.translatable("container.enderchest").getString();
+        return entry.containerTitle.equals(enderChestTitle);
+    }
 
     /**
      * Map a ContainerCategory to the clipboard entry type string.
      */
     public static String categoryToEntryType(ContainerClassifier.ContainerCategory category) {
         return switch (category) {
-            case STANDARD -> TYPE_CONTAINER;
+            case STANDARD, ENDER_CHEST -> TYPE_CONTAINER;
             case GRID9, CRAFTER, CRAFTING_TABLE -> TYPE_GRID9;
             case HOPPER -> TYPE_HOPPER5;
             case FURNACE -> TYPE_FURNACE2;
@@ -1026,6 +1269,7 @@ public class LayoutClipboard {
     public static int getActiveIndexForCategory(ContainerClassifier.ContainerCategory category) {
         return switch (category) {
             case STANDARD -> activeContainerIndex;
+            case ENDER_CHEST -> activeEnderChestIndex;
             case GRID9, CRAFTER, CRAFTING_TABLE -> activeGrid9Index;
             case HOPPER -> activeHopper5Index;
             case FURNACE -> activeFurnace2Index;
@@ -1236,7 +1480,7 @@ public class LayoutClipboard {
             removeDuplicate(dupIndex);
         }
 
-        addToHistory(entry);
+        addToHistory(entry, category);
         ClipboardStorage.save();
 
         if (!silent) {
@@ -1480,6 +1724,8 @@ public class LayoutClipboard {
                 targetLayout.size(), allAccessibleSlots.size(), cursorOccupied);
 
         // Quick check: is the layout already matching?
+        // For container/bundle items, uses identity + content-similarity matching
+        // instead of just type-only, so swapped shulkers are detected as not-matching.
         boolean alreadyMatches = true;
         boolean quantityMaxOnly = false;
         for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
@@ -1497,7 +1743,34 @@ public class LayoutClipboard {
                 if (desired.components() != null) {
                     String currentComponents = serializeComponents(current);
                     if (!desired.components().equals(currentComponents)) {
-                        alreadyMatches = false; break;
+                        // Not an exact match — for container/bundle items, check if the
+                        // specific container is the right one using identity/content-similarity
+                        if (isContainerOrBundle(desired)) {
+                            // Check via identity match first, then content-similarity
+                            boolean rightContainer = isIdentityMatch(desired, current)
+                                    || isNameAndTypeMatch(desired, current)
+                                    || isContentSimilar(desired, current);
+                            if (!rightContainer) {
+                                // Wrong container in this slot — need rearranging
+                                InvTweaksConfig.debugLog("MATCH-ALREADY",
+                                        "Slot %d: container/bundle type matches but identity/content does not — checking if right container exists elsewhere",
+                                        slotId);
+                                alreadyMatches = false; break;
+                            }
+                            // Right container, just changed state — still matches
+                            InvTweaksConfig.debugLog("MATCH-ALREADY",
+                                    "Slot %d: container/bundle identity/content-similar match (state changed, correct position)",
+                                    slotId);
+                        } else {
+                            // Non-container item: identity match can still recognize
+                            // durability-changed tools, uncharged crossbows, etc.
+                            boolean rightItem = isIdentityMatch(desired, current);
+                            if (!rightItem) {
+                                alreadyMatches = false; break;
+                            }
+                            InvTweaksConfig.debugLog("MATCH-ALREADY",
+                                    "Slot %d: identity match (state changed, correct position)", slotId);
+                        }
                     }
                 }
             }
@@ -1582,7 +1855,13 @@ public class LayoutClipboard {
                 if (current.isEmpty() || current.getItem() != desired.item()) continue;
                 if (desired.components() != null) {
                     String currentComp = serializeComponents(current);
-                    if (!desired.components().equals(currentComp)) continue;
+                    if (!desired.components().equals(currentComp)) {
+                        // Not exact — accept identity/name/content-similar matches for trimming
+                        boolean matches = isIdentityMatch(desired, current)
+                                || isNameAndTypeMatch(desired, current)
+                                || isContentSimilar(desired, current);
+                        if (!matches) continue;
+                    }
                 }
                 if (current.getCount() <= desiredQty) continue;
                 // Slot has excess — trim it
@@ -1738,7 +2017,12 @@ public class LayoutClipboard {
             boolean componentMatches = true;
             if (typeMatches && desired.components() != null) {
                 String currentComponents = serializeComponents(currentStack);
-                componentMatches = desired.components().equals(currentComponents);
+                if (!desired.components().equals(currentComponents)) {
+                    // Not exact — check identity/name/content-similarity
+                    componentMatches = isIdentityMatch(desired, currentStack)
+                            || isNameAndTypeMatch(desired, currentStack)
+                            || isContentSimilar(desired, currentStack);
+                }
             }
             if (typeMatches && componentMatches) {
                 if (currentStack.getCount() >= desiredQuantity) {
@@ -2007,10 +2291,9 @@ public class LayoutClipboard {
             ItemStack srcStack = handler.slots.get(srcSlot).getStack();
             if (srcStack.isEmpty() || srcStack.getItem() != itemType) continue;
 
-            if (desiredComponents != null) {
-                String srcComponents = serializeComponents(srcStack);
-                if (!desiredComponents.equals(srcComponents)) continue;
-            }
+            // Ranking already handles matching quality — no post-filter needed.
+            // The 10-tier ranking system ensures exact matches are preferred,
+            // falling through to identity/name/content-similar/type-only as needed.
 
             // QUICK_MOVE only works cross-side (container↔player)
             boolean srcIsPlayer = handler.slots.get(srcSlot).inventory instanceof PlayerInventory;
@@ -2055,6 +2338,15 @@ public class LayoutClipboard {
         String expectedType = categoryToEntryType(category);
         int activeIndex = getActiveIndexForCategory(category);
 
+        // Cross-type fallback: ENDER_CHEST ↔ STANDARD share the same slot layout
+        if (activeIndex < 0 || activeIndex >= history.size()) {
+            if (category == ContainerClassifier.ContainerCategory.ENDER_CHEST) {
+                activeIndex = getActiveIndexForCategory(ContainerClassifier.ContainerCategory.STANDARD);
+            } else if (category == ContainerClassifier.ContainerCategory.STANDARD) {
+                activeIndex = getActiveIndexForCategory(ContainerClassifier.ContainerCategory.ENDER_CHEST);
+            }
+        }
+
         if (activeIndex < 0 || activeIndex >= history.size()) {
             // Cross-type guard messages
             String msg = switch (category) {
@@ -2068,7 +2360,7 @@ public class LayoutClipboard {
 
         HistoryEntry activeEntry = history.get(activeIndex);
 
-        // Verify entry type matches
+        // Verify entry type matches (ENDER_CHEST and STANDARD both use TYPE_CONTAINER)
         if (!expectedType.equals(activeEntry.entryType)) {
             return PasteResult.typeMismatch("Layout type incompatible");
         }
@@ -2137,7 +2429,7 @@ public class LayoutClipboard {
                 return pasteLayout(handler, false, filtered, true);
             }
             default -> {
-                // GRID9, HOPPER, STANDARD: Filter out LOCKED entries, then normal paste
+                // GRID9, HOPPER, STANDARD, ENDER_CHEST: Filter out LOCKED entries, then normal paste
                 Map<Integer, SlotData> filtered = new LinkedHashMap<>();
                 int lockedCount = 0;
                 for (Map.Entry<Integer, SlotData> e : clipboardSlots.entrySet()) {
@@ -2249,9 +2541,15 @@ public class LayoutClipboard {
             if (!handler.slots.get(i).getStack().isEmpty()) continue;
             SlotData destTarget = targetLayout.get(i);
             if (destTarget != null && destTarget.item() == itemType) {
-                // Check component match if tracked
+                // Check component match if tracked — accept identity/content-similar matches
                 boolean compMatch = destTarget.components() == null
                         || destTarget.components().equals(itemComponents);
+                if (!compMatch) {
+                    ItemStack stackCopy = stack; // Already have the stack reference
+                    compMatch = isIdentityMatch(destTarget, stackCopy)
+                            || isNameAndTypeMatch(destTarget, stackCopy)
+                            || isContentSimilar(destTarget, stackCopy);
+                }
                 if (compMatch) {
                     smartDest = i;
                     break;
@@ -2444,11 +2742,9 @@ public class LayoutClipboard {
             ItemStack srcStack = handler.slots.get(srcSlot).getStack();
             if (srcStack.isEmpty() || srcStack.getItem() != itemType) continue;
 
-            // Only exact-component matches when components are tracked
-            if (desiredComponents != null) {
-                String srcComponents = serializeComponents(srcStack);
-                if (!desiredComponents.equals(srcComponents)) continue;
-            }
+            // Ranking already handles matching quality — no post-filter needed.
+            // The 10-tier ranking system ensures exact matches are preferred,
+            // falling through to identity/name/content-similar/type-only as needed.
 
             int canTake = srcStack.getCount();
             SlotData srcTarget = targetLayout.get(srcSlot);
@@ -2546,19 +2842,24 @@ public class LayoutClipboard {
         return result;
     }
 
-    // ========== SOURCE RANKING (Fixes 3 + 5) ==========
+    // ========== SOURCE RANKING (10-tier content-similarity system) ==========
 
     /**
-     * Rank source slots for item sourcing, combining identity matching (Fix 3)
-     * and not-in-target-position preference (Fix 5).
+     * Rank source slots for item sourcing with 10-tier content-similarity matching.
      *
-     * Tier 0: Exact component match AND not in its target position (best)
-     * Tier 1: Exact component match AND in its target position
-     * Tier 2: Type-only match AND not in its target position
-     * Tier 3: Type-only match AND in its target position (worst)
+     * Tier 0: Exact component match, not in target position (best)
+     * Tier 1: Exact component match, in target position
+     * Tier 2: Identity match (state stripped), not in target position
+     * Tier 3: Identity match (state stripped), in target position
+     * Tier 4: Name + type match, not in target position
+     * Tier 5: Name + type match, in target position
+     * Tier 6: Content-similar (container/bundle), not in target position
+     * Tier 7: Content-similar (container/bundle), in target position
+     * Tier 8: Type-only match, not in target position
+     * Tier 9: Type-only match, in target position (worst)
      *
-     * Within each tier, slots are sorted by handler index within the same side
-     * (container slots before player slots, lowest index first within each side).
+     * Within each tier, container slots are preferred before player slots,
+     * lowest index first within each side.
      */
     private static List<Integer> rankSourceSlots(ScreenHandler handler, int targetSlotId,
                                                   Item itemType, String desiredComponents,
@@ -2574,6 +2875,9 @@ public class LayoutClipboard {
                                                   Set<Integer> protectedSlots) {
         List<int[]> candidates = new ArrayList<>();
 
+        // Build the clipboard SlotData for the target slot (needed for identity/name/content checks)
+        SlotData targetClipData = targetLayout.get(targetSlotId);
+
         for (int srcSlot : allAccessible) {
             if (srcSlot == targetSlotId) continue;
             if (protectedSlots.contains(srcSlot)) continue;
@@ -2586,17 +2890,49 @@ public class LayoutClipboard {
                 inTargetPosition = true;
             }
 
+            // Evaluate tier from 0 (best) down — first matching tier wins
+            int tier;
+
+            // Tier 0-1: Exact component match
             boolean exactMatch = false;
             if (desiredComponents != null) {
                 String srcComponents = serializeComponents(srcStack);
                 exactMatch = desiredComponents.equals(srcComponents);
             }
 
-            int tier;
-            if (exactMatch && !inTargetPosition) tier = 0;
-            else if (exactMatch) tier = 1;
-            else if (!inTargetPosition) tier = 2;
-            else tier = 3;
+            if (exactMatch) {
+                tier = inTargetPosition ? 1 : 0;
+            }
+            // Tier 2-3: Identity match (state components stripped)
+            else if (targetClipData != null && targetClipData.components() != null
+                     && isIdentityMatch(targetClipData, srcStack)) {
+                tier = inTargetPosition ? 3 : 2;
+                InvTweaksConfig.debugLog("MATCH-IDENTITY", "Slot %d: %s identity-matches target slot %d (tier %d)",
+                        srcSlot, itemType, targetSlotId, tier);
+            }
+            // Tier 4-5: Name + type match
+            else if (targetClipData != null && isNameAndTypeMatch(targetClipData, srcStack)) {
+                tier = inTargetPosition ? 5 : 4;
+                InvTweaksConfig.debugLog("MATCH-NAME", "Slot %d: %s name-matches target slot %d (tier %d)",
+                        srcSlot, itemType, targetSlotId, tier);
+            }
+            // Tier 6-7: Content-similar (container/bundle items)
+            else if (targetClipData != null && isContentSimilar(targetClipData, srcStack)) {
+                // Calculate overlap percentage for debug logging
+                ItemStack clipStack = reconstructStack(targetClipData.item(), targetClipData.count(), targetClipData.components());
+                Set<Item> clipTypes = extractContainedItemTypes(clipStack);
+                Set<Item> liveTypes = extractContainedItemTypes(srcStack);
+                Set<Item> overlap = new HashSet<>(clipTypes);
+                overlap.retainAll(liveTypes);
+                int overlapPct = clipTypes.isEmpty() ? 0 : (int) Math.round(100.0 * overlap.size() / clipTypes.size());
+                tier = inTargetPosition ? 7 : 6;
+                InvTweaksConfig.debugLog("MATCH-CONTENT", "Slot %d: %s content-similar to target slot %d with %d%% overlap (%d/%d types) (tier %d)",
+                        srcSlot, itemType, targetSlotId, overlapPct, overlap.size(), clipTypes.size(), tier);
+            }
+            // Tier 8-9: Type-only match (last resort)
+            else {
+                tier = inTargetPosition ? 9 : 8;
+            }
 
             candidates.add(new int[]{srcSlot, tier});
         }
@@ -2682,7 +3018,7 @@ public class LayoutClipboard {
     // ========== PUBLIC API ==========
 
     public static boolean hasClipboard() {
-        return activeContainerIndex >= 0 || activePlayerIndex >= 0 || activeBundleIndex >= 0;
+        return activeContainerIndex >= 0 || activePlayerIndex >= 0 || activeBundleIndex >= 0 || activeEnderChestIndex >= 0;
     }
 
     public static void clearClipboard() {

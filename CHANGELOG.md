@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.0]
+
+### Content-Similarity Matching
+- Added content-similarity matching: paste now correctly handles shulker boxes, bundles, and other items whose contents or durability changed since the layout was copied
+- Tools, weapons, and armor match by identity (enchantments, name, trim) regardless of durability
+- Named containers (anvil-renamed shulkers/bundles) match by name even when contents are completely different
+- Crossbows match regardless of loaded/unloaded state
+
 ## 2.0.1
 
 ### Bug Fixes
