@@ -1,11 +1,11 @@
 package tacticalle.invtweaks;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.text.OrderedText;
-import net.minecraft.text.Text;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.network.chat.Component;
 import tacticalle.invtweaks.mixin.HandledScreenAccessor;
 
 import java.util.ArrayList;
@@ -53,12 +53,12 @@ public class InvTweaksOverlay {
     /**
      * Called from HandledScreenMixin (before tooltip) to draw all active messages.
      */
-    public static void render(DrawContext context, HandledScreen<?> screen, int screenWidth, int screenHeight) {
+    public static void render(GuiGraphics context, AbstractContainerScreen<?> screen, int screenWidth, int screenHeight) {
         tick();
         if (activeMessages.isEmpty()) return;
 
-        MinecraftClient mc = MinecraftClient.getInstance();
-        TextRenderer textRenderer = mc.textRenderer;
+        Minecraft mc = Minecraft.getInstance();
+        Font font = mc.font;
         HandledScreenAccessor accessor = (HandledScreenAccessor) screen;
 
         int guiRight = accessor.getX() + accessor.getBackgroundWidth();
@@ -86,8 +86,8 @@ public class InvTweaksOverlay {
         // Pre-compute total message block height for vertical centering
         int totalHeight = 0;
         for (OverlayMessage msg : activeMessages) {
-            List<OrderedText> lines = textRenderer.wrapLines(Text.literal(msg.text()), maxTextWidth);
-            int msgHeight = lines.size() * textRenderer.fontHeight + (BG_PADDING_V * 2);
+            List<FormattedCharSequence> lines = font.split(Component.literal(msg.text()), maxTextWidth);
+            int msgHeight = lines.size() * font.lineHeight + (BG_PADDING_V * 2);
             totalHeight += msgHeight + MESSAGE_GAP;
         }
         totalHeight -= MESSAGE_GAP; // no gap after last
@@ -115,13 +115,13 @@ public class InvTweaksOverlay {
 
             int alphaInt = (int)(alpha * 255) & 0xFF;
 
-            List<OrderedText> lines = textRenderer.wrapLines(Text.literal(msg.text()), maxTextWidth);
-            int textHeight = lines.size() * textRenderer.fontHeight;
+            List<FormattedCharSequence> lines = font.split(Component.literal(msg.text()), maxTextWidth);
+            int textHeight = lines.size() * font.lineHeight;
 
             // Measure the widest line to size the background snugly
             int actualTextWidth = 0;
-            for (OrderedText line : lines) {
-                int lineWidth = textRenderer.getWidth(line);
+            for (FormattedCharSequence line : lines) {
+                int lineWidth = font.getWidth(line);
                 if (lineWidth > actualTextWidth) actualTextWidth = lineWidth;
             }
 
@@ -136,7 +136,7 @@ public class InvTweaksOverlay {
             // Draw text lines
             int textColor = (msg.color() & 0x00FFFFFF) | (alphaInt << 24);
             for (int i = 0; i < lines.size(); i++) {
-                context.drawTextWithShadow(textRenderer, lines.get(i), renderX, currentY + i * textRenderer.fontHeight, textColor);
+                context.drawString(font, lines.get(i), renderX, currentY + i * font.lineHeight, textColor);
             }
 
             currentY = bgY2 + MESSAGE_GAP;

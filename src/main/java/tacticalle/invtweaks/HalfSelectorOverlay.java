@@ -1,12 +1,12 @@
 package tacticalle.invtweaks;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.text.Text;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
@@ -98,11 +98,11 @@ public class HalfSelectorOverlay {
 
     // ========== RENDER ==========
 
-    public static void render(DrawContext context, HandledScreen<?> screen, int screenWidth, int screenHeight) {
+    public static void render(GuiGraphics context, AbstractContainerScreen<?> screen, int screenWidth, int screenHeight) {
         if (!active || clipboardData == null) return;
 
-        MinecraftClient mc = MinecraftClient.getInstance();
-        TextRenderer textRenderer = mc.textRenderer;
+        Minecraft mc = Minecraft.getInstance();
+        Font font = mc.font;
 
         // Semi-transparent dark background
         context.fill(0, 0, screenWidth, screenHeight, DIM_OVERLAY);
@@ -118,7 +118,7 @@ public class HalfSelectorOverlay {
         String titleText = direction.equals("27to54")
                 ? "Choose where to paste"
                 : "Choose layout half to paste";
-        context.drawCenteredTextWithShadow(textRenderer, Text.literal(titleText),
+        context.drawCenteredTextWithShadow(font, Component.literal(titleText),
                 centerX, centerY - gridH / 2 - 30, WHITE);
 
         // Left grid position
@@ -145,31 +145,31 @@ public class HalfSelectorOverlay {
         if (direction.equals("27to54")) {
             // 27→54: both grids show the same clipboard items (keys 0-26)
             // Labels indicate the TARGET position in the 54-slot container
-            renderGrid(context, textRenderer, leftGridX, leftGridY, gridW, gridH,
+            renderGrid(context, font, leftGridX, leftGridY, gridW, gridH,
                     clipboardData, 0, 26, "Top Half", hoverLeft);
-            renderGrid(context, textRenderer, rightGridX, rightGridY, gridW, gridH,
+            renderGrid(context, font, rightGridX, rightGridY, gridW, gridH,
                     clipboardData, 0, 26, "Bottom Half", hoverRight);
         } else {
             // 54→27: left grid shows top half (keys 0-26), right shows bottom half (keys 27-53)
-            renderGrid(context, textRenderer, leftGridX, leftGridY, gridW, gridH,
+            renderGrid(context, font, leftGridX, leftGridY, gridW, gridH,
                     clipboardData, 0, 26, "Top Half", hoverLeft);
-            renderGrid(context, textRenderer, rightGridX, rightGridY, gridW, gridH,
+            renderGrid(context, font, rightGridX, rightGridY, gridW, gridH,
                     clipboardData, 27, 53, "Bottom Half", hoverRight);
         }
 
         // Keyboard hint labels below grids
         int hintY = leftGridY + gridH + 8;
-        context.drawCenteredTextWithShadow(textRenderer, Text.literal("[A] Top Half"),
+        context.drawCenteredTextWithShadow(font, Component.literal("[A] Top Half"),
                 leftGridX + gridW / 2, hintY, GRAY);
-        context.drawCenteredTextWithShadow(textRenderer, Text.literal("[D] Bottom Half"),
+        context.drawCenteredTextWithShadow(font, Component.literal("[D] Bottom Half"),
                 rightGridX + gridW / 2, hintY, GRAY);
 
         // ESC hint
-        context.drawCenteredTextWithShadow(textRenderer, Text.literal("[ESC] Cancel"),
+        context.drawCenteredTextWithShadow(font, Component.literal("[ESC] Cancel"),
                 centerX, hintY + 14, DARK_GRAY);
     }
 
-    private static void renderGrid(DrawContext context, TextRenderer textRenderer,
+    private static void renderGrid(GuiGraphics context, Font font,
                                     int gridX, int gridY, int gridW, int gridH,
                                     Map<Integer, LayoutClipboard.SlotData> data,
                                     int keyStart, int keyEnd, String label, boolean hovered) {
@@ -184,7 +184,7 @@ public class HalfSelectorOverlay {
         context.fill(gridX - 3, gridY - 3, gridX + gridW + 3, gridY + gridH + 3, 0xFFC6C6C6);
 
         // Label above grid
-        context.drawCenteredTextWithShadow(textRenderer, Text.literal(label),
+        context.drawCenteredTextWithShadow(font, Component.literal(label),
                 gridX + gridW / 2, gridY - 16, WHITE);
 
         // Draw slots
@@ -204,7 +204,7 @@ public class HalfSelectorOverlay {
             int sy = gridY + row * SLOT_SIZE;
 
             LayoutClipboard.SlotData sd = data.get(key);
-            renderPreviewSlot(context, textRenderer, sd, sx, sy, SLOT_SIZE);
+            renderPreviewSlot(context, font, sd, sx, sy, SLOT_SIZE);
         }
 
         // Fill remaining empty slots if fewer than 27
@@ -213,7 +213,7 @@ public class HalfSelectorOverlay {
             int row = i / GRID_COLS;
             int sx = gridX + col * SLOT_SIZE;
             int sy = gridY + row * SLOT_SIZE;
-            renderPreviewSlot(context, textRenderer, null, sx, sy, SLOT_SIZE);
+            renderPreviewSlot(context, font, null, sx, sy, SLOT_SIZE);
         }
 
         // Hover highlight overlay
@@ -222,7 +222,7 @@ public class HalfSelectorOverlay {
         }
     }
 
-    private static void renderPreviewSlot(DrawContext context, TextRenderer textRenderer,
+    private static void renderPreviewSlot(GuiGraphics context, Font font,
                                            LayoutClipboard.SlotData sd, int sx, int sy, int slotSize) {
         boolean empty = (sd == null || sd.item() == null);
 
@@ -236,7 +236,7 @@ public class HalfSelectorOverlay {
             int itemX = sx + 1 + Math.max(0, (slotSize - 2 - 16) / 2);
             int itemY = sy + 1 + Math.max(0, (slotSize - 2 - 16) / 2);
             context.drawItem(displayStack, itemX, itemY);
-            context.drawStackOverlay(textRenderer, displayStack, itemX, itemY);
+            context.drawStackOverlay(font, displayStack, itemX, itemY);
         }
     }
 

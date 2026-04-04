@@ -9,17 +9,17 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.util.InputUtil;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.KeyMapping;
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.resources.ResourceLocation;
 
 public class InvTweaksClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("invtweaks");
 
     // Exposed so InvTweaksConfigScreen can read/display the keybind
-    public static KeyBinding openConfigKey;
+    public static KeyMapping openConfigKey;
 
     // Config key debounce (for the raw GLFW check fallback)
     private static boolean configKeyWasDown = false;
@@ -32,11 +32,11 @@ public class InvTweaksClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         // Register keybind to open config screen (default: K)
-        openConfigKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        openConfigKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.invtweaks.open_config",
-                InputUtil.Type.KEYSYM,
+                InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_K,
-                new KeyBinding.Category(Identifier.of("category", "invtweaks"))
+                new KeyMapping.Category(ResourceLocation.of("category", "invtweaks"))
         ));
 
         // Load clipboard history from disk
@@ -44,8 +44,8 @@ public class InvTweaksClient implements ClientModInitializer {
 
         // Check for config screen keybind press each tick + death detection
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            // Drain Fabric KeyBinding queue (kept registered for Mod Menu integration) but don't act on it
-            while (openConfigKey.wasPressed()) { /* discard */ }
+            // Drain Fabric KeyMapping queue (kept registered for Mod Menu integration) but don't act on it
+            while (openConfigKey.consumeClick()) { /* discard */ }
             // Only use the GLFW-based check via the config field value
             InvTweaksConfig cfg = InvTweaksConfig.get();
             boolean configKeyPressed = false;
@@ -59,7 +59,7 @@ public class InvTweaksClient implements ClientModInitializer {
             } else {
                 configKeyWasDown = false;
             }
-            if (configKeyPressed && client.currentScreen == null) {
+            if (configKeyPressed && client.screen == null) {
                 client.setScreen(new InvTweaksConfigScreen(null));
             }
 
@@ -70,7 +70,7 @@ public class InvTweaksClient implements ClientModInitializer {
                 if (isAlive) {
                     // Cache inventory ItemStack copies every tick while alive
                     cachedInventoryStacks.clear();
-                    net.minecraft.entity.player.PlayerInventory inv = client.player.getInventory();
+                    net.minecraft.entity.player.Inventory inv = client.player.getInventory();
                     // Main inventory (keys 0-35) and hotbar
                     for (int i = 0; i < 36; i++) {
                         cachedInventoryStacks.put(i, inv.getStack(i).copy());
@@ -91,7 +91,7 @@ public class InvTweaksClient implements ClientModInitializer {
                     for (java.util.Map.Entry<Integer, net.minecraft.item.ItemStack> entry : cachedInventoryStacks.entrySet()) {
                         int invSlot = entry.getKey();
                         net.minecraft.item.ItemStack stack = entry.getValue();
-                        // Fix armor key mapping: PlayerInventory slot 36(FEET)→snapshot 39,
+                        // Fix armor key mapping: Inventory slot 36(FEET)→snapshot 39,
                         // 37(LEGS)→38, 38(CHEST)→37, 39(HEAD)→36
                         // This matches copyLayout where handler slot 5(HEAD)→key 36, 8(FEET)→key 39
                         int snapshotKey = invSlot;
@@ -115,9 +115,9 @@ public class InvTweaksClient implements ClientModInitializer {
             }
         });
 
-        // Register overlay rendering for all HandledScreen subclasses (including InventoryScreen)
+        // Register overlay rendering for all AbstractContainerScreen subclasses (including InventoryScreen)
         ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
-            if (screen instanceof HandledScreen<?> handledScreen) {
+            if (screen instanceof AbstractContainerScreen<?> handledScreen) {
                 ScreenEvents.afterRender(screen).register((s, context, mouseX, mouseY, tickDelta) -> {
                     if (HalfSelectorOverlay.isActive()) {
                         HalfSelectorOverlay.render(context, handledScreen, scaledWidth, scaledHeight);

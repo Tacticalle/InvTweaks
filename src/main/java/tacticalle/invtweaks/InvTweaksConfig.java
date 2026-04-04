@@ -3,7 +3,7 @@ package tacticalle.invtweaks;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.util.Util;
+import net.minecraft.Util;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +25,7 @@ public class InvTweaksConfig {
      * Check if the current OS is macOS.
      */
     private static boolean isMacOS() {
-        return Util.getOperatingSystem() == Util.OperatingSystem.OSX;
+        return Util.getPlatform() == Util.OperatingSystem.OSX;
     }
 
     // Global modifier key GLFW codes (OS-specific defaults)
@@ -266,7 +266,7 @@ public class InvTweaksConfig {
      * for modifier keys like Ctrl, Alt, Shift).
      */
     public static boolean isKeyPressed(int glfwKey) {
-        long windowHandle = net.minecraft.client.MinecraftClient.getInstance().getWindow().getHandle();
+        long windowHandle = net.minecraft.client.Minecraft.getInstance().getWindow().getHandle();
         if (GLFW.glfwGetKey(windowHandle, glfwKey) == GLFW.GLFW_PRESS) return true;
         int pair = getPairedKey(glfwKey);
         if (pair != -1 && GLFW.glfwGetKey(windowHandle, pair) == GLFW.GLFW_PRESS) return true;

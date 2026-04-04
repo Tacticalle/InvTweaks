@@ -6,8 +6,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.ingame.AnvilScreen;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.inventory.AnvilScreen;
 import net.minecraft.client.input.KeyInput;
 
 import tacticalle.invtweaks.InvTweaksConfig;
@@ -22,7 +22,7 @@ public class AnvilScreenMixin {
         if (!config.enableCopyPaste) return;
 
         int keyCode = input.key();
-        long windowHandle = MinecraftClient.getInstance().getWindow().getHandle();
+        long windowHandle = Minecraft.getInstance().getWindow().getHandle();
 
         boolean ctrlOrSuper = GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS ||
                               GLFW.glfwGetKey(windowHandle, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS ||

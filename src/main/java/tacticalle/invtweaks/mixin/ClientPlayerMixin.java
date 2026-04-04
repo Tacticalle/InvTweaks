@@ -1,7 +1,7 @@
 package tacticalle.invtweaks.mixin;
 
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.item.ItemStack;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -15,12 +15,12 @@ import tacticalle.invtweaks.InvTweaksConfig;
  * When the player presses Q (drop) with an InvTweaks modifier held, and no screen is open,
  * this drops half the stack instead of 1 or all.
  */
-@Mixin(ClientPlayerEntity.class)
+@Mixin(LocalPlayer.class)
 public class ClientPlayerMixin {
     @Unique
     private boolean it_throwHalfActive = false;
 
-    @Inject(method = "dropSelectedItem", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "drop", at = @At("HEAD"), cancellable = true)
     private void onDropSelectedItem(boolean entireStack, CallbackInfoReturnable<Boolean> cir) {
         // Guard against recursion from our own drop calls
         if (it_throwHalfActive) return;
@@ -34,8 +34,8 @@ public class ClientPlayerMixin {
         boolean throwAB1 = config.enableThrowAllBut1 && config.isThrowAllBut1KeyPressed();
         if (!throwHalf && !throwAB1) return;
 
-        ClientPlayerEntity self = (ClientPlayerEntity) (Object) this;
-        ItemStack held = self.getMainHandStack();
+        LocalPlayer self = (LocalPlayer) (Object) this;
+        ItemStack held = self.getMainHandItem();
         if (held.isEmpty()) return;
 
         int count = held.getCount();
@@ -57,7 +57,7 @@ public class ClientPlayerMixin {
         it_throwHalfActive = true;
         try {
             for (int i = 0; i < toDrop; i++) {
-                self.dropSelectedItem(false);
+                self.drop(false);
             }
         } finally {
             it_throwHalfActive = false;

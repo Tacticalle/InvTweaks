@@ -1,19 +1,19 @@
 package tacticalle.invtweaks;
 
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.screen.GenericContainerScreenHandler;
-import net.minecraft.screen.Generic3x3ContainerScreenHandler;
-import net.minecraft.screen.CrafterScreenHandler;
-import net.minecraft.screen.CraftingScreenHandler;
-import net.minecraft.screen.HopperScreenHandler;
-import net.minecraft.screen.FurnaceScreenHandler;
-import net.minecraft.screen.BlastFurnaceScreenHandler;
-import net.minecraft.screen.ShulkerBoxScreenHandler;
-import net.minecraft.screen.SmokerScreenHandler;
-import net.minecraft.text.Text;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.DispenserMenu;
+import net.minecraft.world.inventory.CrafterMenu;
+import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.inventory.HopperMenu;
+import net.minecraft.world.inventory.FurnaceMenu;
+import net.minecraft.world.inventory.BlastFurnaceMenu;
+import net.minecraft.world.inventory.ShulkerBoxMenu;
+import net.minecraft.world.inventory.SmokerMenu;
+import net.minecraft.network.chat.Component;
 
 /**
- * Classifies a container's ScreenHandler into a category.
+ * Classifies a container's AbstractContainerMenu into a category.
  * Used to gate clipboard operations — incompatible containers block copy/paste/cut.
  *
  * NOTE: All Yarn class names have been verified against the 1.21.11 mappings.
@@ -22,66 +22,66 @@ import net.minecraft.text.Text;
 public class ContainerClassifier {
 
     public enum ContainerCategory {
-        STANDARD,       // GenericContainerScreenHandler — chests, barrels, shulker boxes (27 or 54 slots)
-        ENDER_CHEST,    // GenericContainerScreenHandler with ender chest title — separate clipboard tracking
-        GRID9,          // Generic3x3ContainerScreenHandler — dispensers, droppers
-        CRAFTER,        // CrafterScreenHandler — crafter (3x3 with lockable slots)
-        CRAFTING_TABLE, // CraftingScreenHandler — crafting table (9 input + 1 output)
-        HOPPER,         // HopperScreenHandler — hopper (5 slots)
+        STANDARD,       // ChestMenu — chests, barrels, shulker boxes (27 or 54 slots)
+        ENDER_CHEST,    // ChestMenu with ender chest title — separate clipboard tracking
+        GRID9,          // DispenserMenu — dispensers, droppers
+        CRAFTER,        // CrafterMenu — crafter (3x3 with lockable slots)
+        CRAFTING_TABLE, // CraftingMenu — crafting table (9 input + 1 output)
+        HOPPER,         // HopperMenu — hopper (5 slots)
         FURNACE,        // AbstractFurnaceScreenHandler subtypes — furnaces
         INCOMPATIBLE,   // Everything else — villager trading, anvil, enchanting, etc.
         PLAYER_ONLY     // No container open — just the player inventory (E key)
     }
 
     /**
-     * Classify a ScreenHandler into a ContainerCategory (without title — no ender chest detection).
+     * Classify a AbstractContainerMenu into a ContainerCategory (without title — no ender chest detection).
      * PLAYER_ONLY is detected separately (caller checks isPlayerOnly before calling this).
      */
-    public static ContainerCategory classifyContainer(ScreenHandler handler) {
+    public static ContainerCategory classifyContainer(AbstractContainerMenu handler) {
         return classifyContainer(handler, null);
     }
 
     /**
-     * Classify a ScreenHandler into a ContainerCategory, using the screen title
+     * Classify a AbstractContainerMenu into a ContainerCategory, using the screen title
      * to distinguish ender chests from regular chests.
      */
-    public static ContainerCategory classifyContainer(ScreenHandler handler, Text title) {
+    public static ContainerCategory classifyContainer(AbstractContainerMenu handler, Component title) {
         if (handler == null) {
             return ContainerCategory.INCOMPATIBLE;
         }
 
         // Check in order of most common first
-        if (handler instanceof ShulkerBoxScreenHandler) {
+        if (handler instanceof ShulkerBoxMenu) {
             return ContainerCategory.STANDARD;
         }
-        if (handler instanceof GenericContainerScreenHandler) {
+        if (handler instanceof ChestMenu) {
             // Check for ender chest by screen title
             if (title != null) {
                 String titleString = title.getString();
-                String enderChestTitle = Text.translatable("container.enderchest").getString();
+                String enderChestTitle = Component.translatable("container.enderchest").getString();
                 if (titleString.equals(enderChestTitle)) {
                     return ContainerCategory.ENDER_CHEST;
                 }
             }
             return ContainerCategory.STANDARD;
         }
-        if (handler instanceof Generic3x3ContainerScreenHandler) {
+        if (handler instanceof DispenserMenu) {
             return ContainerCategory.GRID9;
         }
-        if (handler instanceof CrafterScreenHandler) {
+        if (handler instanceof CrafterMenu) {
             return ContainerCategory.CRAFTER;
         }
-        if (handler instanceof CraftingScreenHandler) {
+        if (handler instanceof CraftingMenu) {
             return ContainerCategory.CRAFTING_TABLE;
         }
-        if (handler instanceof HopperScreenHandler) {
+        if (handler instanceof HopperMenu) {
             return ContainerCategory.HOPPER;
         }
         // Check all furnace variants — they share AbstractFurnaceScreenHandler
         // but we check concrete types in case the abstract isn't accessible
-        if (handler instanceof FurnaceScreenHandler
-                || handler instanceof BlastFurnaceScreenHandler
-                || handler instanceof SmokerScreenHandler) {
+        if (handler instanceof FurnaceMenu
+                || handler instanceof BlastFurnaceMenu
+                || handler instanceof SmokerMenu) {
             return ContainerCategory.FURNACE;
         }
 

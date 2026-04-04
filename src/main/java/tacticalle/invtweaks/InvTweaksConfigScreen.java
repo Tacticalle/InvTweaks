@@ -1,16 +1,16 @@
 package tacticalle.invtweaks;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.Element;
-import net.minecraft.client.gui.Selectable;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.ElementListWidget;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.narration.NarratableEntry;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.client.input.KeyInput;
-import net.minecraft.text.Text;
-import net.minecraft.util.Util;
+import net.minecraft.network.chat.Component;
+import net.minecraft.Util;
 import org.lwjgl.glfw.GLFW;
 
 import java.net.URI;
@@ -40,7 +40,7 @@ public class InvTweaksConfigScreen extends Screen {
     // Tab state (4 tabs: no Advanced tab)
     private enum Tab { ALL, TWEAKS, HOTKEYS, DEBUG }
     private Tab activeTab = Tab.ALL;
-    private final List<ButtonWidget> tabButtons = new ArrayList<>();
+    private final List<Button> tabButtons = new ArrayList<>();
 
     // Current entry list
     private ConfigEntryList entryList;
@@ -68,7 +68,7 @@ public class InvTweaksConfigScreen extends Screen {
     private final List<ConfigEntry> advancedOverrideEntries = new ArrayList<>();
 
     public InvTweaksConfigScreen(Screen parent) {
-        super(Text.literal("InvTweaks Configuration"));
+        super(Component.literal("InvTweaks Configuration"));
         this.parent = parent;
     }
 
@@ -126,8 +126,8 @@ public class InvTweaksConfigScreen extends Screen {
         for (int i = 0; i < tabCount; i++) {
             final Tab tab = tabValues[i];
             int tx = tabBarLeft + i * (tabW + tabGap);
-            ButtonWidget tabBtn = ButtonWidget.builder(
-                    Text.literal(tabLabels[i]),
+            Button tabBtn = Button.builder(
+                    Component.literal(tabLabels[i]),
                     button -> switchTab(tab)
             ).dimensions(tx, tabY, tabW, BUTTON_HEIGHT).build();
             tabButtons.add(tabBtn);
@@ -144,7 +144,7 @@ public class InvTweaksConfigScreen extends Screen {
 
         // ---- Done button (fixed at bottom) ----
         int doneW = Math.max(100, scaledButtonWidth(100));
-        addDrawableChild(ButtonWidget.builder(Text.literal("Done"), button -> {
+        addDrawableChild(Button.builder(Component.literal("Done"), button -> {
             config.save();
             if (client != null) client.setScreen(parent);
         }).dimensions(centerX - doneW / 2, this.height - 27, doneW, BUTTON_HEIGHT).build());
@@ -161,7 +161,7 @@ public class InvTweaksConfigScreen extends Screen {
     private void updateTabHighlights() {
         Tab[] tabs = Tab.values();
         for (int i = 0; i < tabButtons.size(); i++) {
-            ButtonWidget btn = tabButtons.get(i);
+            Button btn = tabButtons.get(i);
             boolean active = tabs[i] == activeTab;
             String label = switch (tabs[i]) {
                 case ALL -> "All";
@@ -170,9 +170,9 @@ public class InvTweaksConfigScreen extends Screen {
                 case DEBUG -> "Debug";
             };
             if (active) {
-                btn.setMessage(Text.literal("\u00a7n" + label));
+                btn.setMessage(Component.literal("\u00a7n" + label));
             } else {
-                btn.setMessage(Text.literal(label));
+                btn.setMessage(Component.literal(label));
             }
         }
     }
@@ -270,14 +270,14 @@ public class InvTweaksConfigScreen extends Screen {
         if (config.enableDebugLogging) {
             entryList.addConfigEntry(new ActionButtonEntry("Copy Debug Log", () -> {
                 String contents = InvTweaksConfig.getDebugLogContents();
-                MinecraftClient.getInstance().keyboard.setClipboard(contents);
+                Minecraft.getInstance().keyboard.setClipboard(contents);
                 copiedTimestamp = System.currentTimeMillis();
             }, "Copies recent debug entries to your clipboard for bug reports."));
         }
 
         entryList.addConfigEntry(new ActionButtonEntry("Report Bug", () -> {
             try {
-                Util.getOperatingSystem().open(new URI("https://github.com/Tacticalle/InvTweaks/issues/new"));
+                Util.getPlatform().open(new URI("https://github.com/Tacticalle/InvTweaks/issues/new"));
             } catch (Exception e) {
                 InvTweaksConfig.debugLog("CONFIG", "Failed to open bug report URL: %s", e.getMessage());
             }
@@ -466,11 +466,11 @@ public class InvTweaksConfigScreen extends Screen {
     private void addSizeMismatchModeEntry() {
         int cycleBtnW = scaledButtonWidth(110);
         String currentLabel = SIZE_MISMATCH_MODE_LABELS[Math.max(0, Math.min(2, config.sizeMismatchPasteMode))];
-        ButtonWidget cycleBtn = ButtonWidget.builder(
-                Text.literal(currentLabel),
+        Button cycleBtn = Button.builder(
+                Component.literal(currentLabel),
                 button -> {
                     config.sizeMismatchPasteMode = (config.sizeMismatchPasteMode + 1) % 3;
-                    button.setMessage(Text.literal(SIZE_MISMATCH_MODE_LABELS[config.sizeMismatchPasteMode]));
+                    button.setMessage(Component.literal(SIZE_MISMATCH_MODE_LABELS[config.sizeMismatchPasteMode]));
                 }
         ).dimensions(0, 0, cycleBtnW, BUTTON_HEIGHT).build();
         entryList.addConfigEntry(new CyclingModeEntry("Size Mismatch Paste Mode", cycleBtn,
@@ -484,7 +484,7 @@ public class InvTweaksConfigScreen extends Screen {
         double mouseX = click.x();
         double mouseY = click.y();
         if (activeEditEntry != null && activeEditEntry.isEditing()) {
-            ButtonWidget valBtn = activeEditEntry.valueBtn;
+            Button valBtn = activeEditEntry.valueBtn;
             if (mouseX >= valBtn.getX() && mouseX < valBtn.getX() + valBtn.getWidth()
                     && mouseY >= valBtn.getY() && mouseY < valBtn.getY() + valBtn.getHeight()) {
                 // Let the button handle it
@@ -498,15 +498,15 @@ public class InvTweaksConfigScreen extends Screen {
     // ========== Render ==========
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 10, WHITE);
+        context.drawCenteredTextWithShadow(this.font, this.title, this.width / 2, 10, WHITE);
 
         // Tooltip rendering (after everything else so it draws on top)
         renderTooltip(context, mouseX, mouseY);
     }
 
-    private void renderTooltip(DrawContext context, int mouseX, int mouseY) {
+    private void renderTooltip(GuiGraphics context, int mouseX, int mouseY) {
         if (entryList == null) return;
 
         ConfigEntry currentHovered = null;
@@ -537,7 +537,7 @@ public class InvTweaksConfigScreen extends Screen {
         if (hoveredEntry != null && hoveredEntry.tooltip != null && !hoveredEntry.tooltip.isEmpty()) {
             long elapsed = System.currentTimeMillis() - hoverStartTime;
             if (elapsed >= TOOLTIP_DELAY_MS) {
-                List<Text> lines = wrapTooltipText(hoveredEntry.tooltip, 250);
+                List<Component> lines = wrapTooltipText(hoveredEntry.tooltip, 250);
                 // drawTooltip internally adds +12 to X and -12 to Y (HoveredTooltipPositioner),
                 // so we counteract those offsets to get precise screen placement.
                 int tooltipX = hoveredEntry.getX() - 12;
@@ -556,28 +556,28 @@ public class InvTweaksConfigScreen extends Screen {
                 // Add 12 to counteract drawTooltip's internal -12 Y offset
                 int tooltipY = desiredTop + 12;
 
-                context.drawTooltip(this.textRenderer, lines, tooltipX, tooltipY);
+                context.drawTooltip(this.font, lines, tooltipX, tooltipY);
             }
         }
     }
 
-    private List<Text> wrapTooltipText(String text, int maxWidth) {
-        List<Text> lines = new ArrayList<>();
+    private List<Component> wrapTooltipText(String text, int maxWidth) {
+        List<Component> lines = new ArrayList<>();
         if (text == null || text.isEmpty()) return lines;
 
         // Split on explicit newlines first, then word-wrap each segment
         String[] paragraphs = text.split("\n");
         for (String paragraph : paragraphs) {
             if (paragraph.isEmpty()) {
-                lines.add(Text.literal(""));
+                lines.add(Component.literal(""));
                 continue;
             }
             String[] words = paragraph.split(" ");
             StringBuilder currentLine = new StringBuilder();
             for (String word : words) {
                 String test = currentLine.length() == 0 ? word : currentLine + " " + word;
-                if (this.textRenderer.getWidth(test) > maxWidth && currentLine.length() > 0) {
-                    lines.add(Text.literal(currentLine.toString()));
+                if (this.font.getWidth(test) > maxWidth && currentLine.length() > 0) {
+                    lines.add(Component.literal(currentLine.toString()));
                     currentLine = new StringBuilder(word);
                 } else {
                     if (currentLine.length() > 0) currentLine.append(" ");
@@ -585,7 +585,7 @@ public class InvTweaksConfigScreen extends Screen {
                 }
             }
             if (currentLine.length() > 0) {
-                lines.add(Text.literal(currentLine.toString()));
+                lines.add(Component.literal(currentLine.toString()));
             }
         }
         return lines;
@@ -599,8 +599,8 @@ public class InvTweaksConfigScreen extends Screen {
 
     // ========== Scrollable list with responsive sizing ==========
 
-    private class ConfigEntryList extends ElementListWidget<ConfigEntry> {
-        public ConfigEntryList(MinecraftClient client, int width, int height, int y, int itemHeight) {
+    private class ConfigEntryList extends ContainerObjectSelectionList<ConfigEntry> {
+        public ConfigEntryList(Minecraft client, int width, int height, int y, int itemHeight) {
             super(client, width, height, y, itemHeight);
         }
 
@@ -625,7 +625,7 @@ public class InvTweaksConfigScreen extends Screen {
 
     // ========== Entry base with optional tooltip ==========
 
-    private abstract static class ConfigEntry extends ElementListWidget.Entry<ConfigEntry> {
+    private abstract static class ConfigEntry extends ContainerObjectSelectionList.Entry<ConfigEntry> {
         protected String tooltip;
 
         ConfigEntry() {
@@ -648,16 +648,16 @@ public class InvTweaksConfigScreen extends Screen {
         }
 
         @Override
-        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+        public void render(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float delta) {
             int x = getX();
             int y = getY();
-            context.drawTextWithShadow(textRenderer, Text.literal(text), x, y + 6, ORANGE);
+            context.drawString(font, Component.literal(text), x, y + 6, ORANGE);
         }
 
         @Override
-        public List<? extends Element> children() { return List.of(); }
+        public List<? extends GuiEventListener> children() { return List.of(); }
         @Override
-        public List<? extends Selectable> selectableChildren() { return List.of(); }
+        public List<? extends NarratableEntry> narratables() { return List.of(); }
     }
 
     // ========== Clickable header entry (for collapsible sections) ==========
@@ -665,20 +665,20 @@ public class InvTweaksConfigScreen extends Screen {
     private class ClickableHeaderEntry extends ConfigEntry {
         private final String text;
         private final int color;
-        private final ButtonWidget headerBtn;
+        private final Button headerBtn;
 
         ClickableHeaderEntry(String text, int color, Runnable onClick) {
             super();
             this.text = text;
             this.color = color;
-            this.headerBtn = ButtonWidget.builder(
-                    Text.literal("\u00a7l" + text),
+            this.headerBtn = Button.builder(
+                    Component.literal("\u00a7l" + text),
                     btn -> onClick.run()
             ).dimensions(0, 0, rowWidth, BUTTON_HEIGHT).build();
         }
 
         @Override
-        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+        public void render(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float delta) {
             int x = getX();
             int y = getY();
             headerBtn.setX(x);
@@ -688,9 +688,9 @@ public class InvTweaksConfigScreen extends Screen {
         }
 
         @Override
-        public List<? extends Element> children() { return List.of(headerBtn); }
+        public List<? extends GuiEventListener> children() { return List.of(headerBtn); }
         @Override
-        public List<? extends Selectable> selectableChildren() { return List.of(headerBtn); }
+        public List<? extends NarratableEntry> narratables() { return List.of(headerBtn); }
     }
 
     // ========== Key binding row (with optional defaultDisplayText for inherited keys) ==========
@@ -698,7 +698,7 @@ public class InvTweaksConfigScreen extends Screen {
     private class KeyBindEntry extends ConfigEntry implements CaptureHandler {
         private final String label;
         private final int labelColor;
-        private final ButtonWidget button;
+        private final Button button;
         private final IntSupplier getter;
         private final IntConsumer setter;
         private final Supplier<String> defaultDisplayText;
@@ -712,8 +712,8 @@ public class InvTweaksConfigScreen extends Screen {
             this.getter = getter;
             this.setter = setter;
             this.defaultDisplayText = defaultDisplayText;
-            this.button = ButtonWidget.builder(
-                    Text.literal(getDisplayText(getter.getAsInt())),
+            this.button = Button.builder(
+                    Component.literal(getDisplayText(getter.getAsInt())),
                     btn -> startCapture(this)
             ).dimensions(0, 0, btnWidth, BUTTON_HEIGHT).build();
         }
@@ -728,64 +728,64 @@ public class InvTweaksConfigScreen extends Screen {
         @Override
         public void onKeyCapture(int keyCode) {
             setter.accept(keyCode);
-            button.setMessage(Text.literal(getDisplayText(keyCode)));
+            button.setMessage(Component.literal(getDisplayText(keyCode)));
             endCapture();
         }
 
         @Override
         public void onCaptureCancel() {
-            button.setMessage(Text.literal(getDisplayText(getter.getAsInt())));
+            button.setMessage(Component.literal(getDisplayText(getter.getAsInt())));
             endCapture();
         }
 
         @Override
-        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+        public void render(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float delta) {
             int x = getX();
             int y = getY();
             int w = getWidth();
-            context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, labelColor);
+            context.drawString(font, Component.literal(label), x, y + 6, labelColor);
             int btnLeft = x + w - button.getWidth();
             button.setX(btnLeft);
             button.setY(y);
             // Update display text dynamically (in case parent key changed)
             if (activeCaptureHandler == this) {
-                button.setMessage(Text.literal("> Press a key <"));
+                button.setMessage(Component.literal("> Press a key <"));
             } else {
-                button.setMessage(Text.literal(getDisplayText(getter.getAsInt())));
+                button.setMessage(Component.literal(getDisplayText(getter.getAsInt())));
             }
             button.render(context, mouseX, mouseY, delta);
         }
 
         @Override
-        public List<? extends Element> children() { return List.of(button); }
+        public List<? extends GuiEventListener> children() { return List.of(button); }
         @Override
-        public List<? extends Selectable> selectableChildren() { return List.of(button); }
+        public List<? extends NarratableEntry> narratables() { return List.of(button); }
     }
 
     // ========== Feature toggle row ==========
 
     private class FeatureEntry extends ConfigEntry {
         private final String label;
-        private final ButtonWidget toggleBtn;
+        private final Button toggleBtn;
 
         FeatureEntry(String label, int toggleW,
                      Supplier<Boolean> enabledGet, Consumer<Boolean> enabledSet, String tooltip) {
             super(tooltip);
             this.label = label;
-            this.toggleBtn = ButtonWidget.builder(
-                    Text.literal(enabledGet.get() ? "\u00a7aON" : "\u00a7cOFF"),
+            this.toggleBtn = Button.builder(
+                    Component.literal(enabledGet.get() ? "\u00a7aON" : "\u00a7cOFF"),
                     button -> {
                         enabledSet.accept(!enabledGet.get());
-                        button.setMessage(Text.literal(enabledGet.get() ? "\u00a7aON" : "\u00a7cOFF"));
+                        button.setMessage(Component.literal(enabledGet.get() ? "\u00a7aON" : "\u00a7cOFF"));
                     }).dimensions(0, 0, toggleW, BUTTON_HEIGHT).build();
         }
 
         @Override
-        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+        public void render(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float delta) {
             int x = getX();
             int y = getY();
             int w = getWidth();
-            context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, WHITE);
+            context.drawString(font, Component.literal(label), x, y + 6, WHITE);
             int toggleX = x + w - toggleBtn.getWidth();
             toggleBtn.setX(toggleX);
             toggleBtn.setY(y);
@@ -793,9 +793,9 @@ public class InvTweaksConfigScreen extends Screen {
         }
 
         @Override
-        public List<? extends Element> children() { return List.of(toggleBtn); }
+        public List<? extends GuiEventListener> children() { return List.of(toggleBtn); }
         @Override
-        public List<? extends Selectable> selectableChildren() { return List.of(toggleBtn); }
+        public List<? extends NarratableEntry> narratables() { return List.of(toggleBtn); }
     }
 
     // ========== Override pair entry (Advanced section: two key buttons per row) ==========
@@ -803,8 +803,8 @@ public class InvTweaksConfigScreen extends Screen {
     private class OverridePairEntry extends ConfigEntry {
         private final String label;
         private final String tweakName;
-        private final ButtonWidget allBut1Btn;
-        private final ButtonWidget only1Btn;
+        private final Button allBut1Btn;
+        private final Button only1Btn;
         private final CaptureHandler ab1Handler;
         private final CaptureHandler o1Handler;
 
@@ -842,12 +842,12 @@ public class InvTweaksConfigScreen extends Screen {
                 @Override
                 public void onKeyCapture(int keyCode) {
                     config.setPerTweakAllBut1Key(tweakName, keyCode);
-                    allBut1Btn.setMessage(Text.literal(getAB1ButtonText(keyCode)));
+                    allBut1Btn.setMessage(Component.literal(getAB1ButtonText(keyCode)));
                     endCapture();
                 }
                 @Override
                 public void onCaptureCancel() {
-                    allBut1Btn.setMessage(Text.literal(getAB1ButtonText(ab1Getter.getAsInt())));
+                    allBut1Btn.setMessage(Component.literal(getAB1ButtonText(ab1Getter.getAsInt())));
                     endCapture();
                 }
             };
@@ -856,40 +856,40 @@ public class InvTweaksConfigScreen extends Screen {
                 @Override
                 public void onKeyCapture(int keyCode) {
                     config.setPerTweakOnly1Key(tweakName, keyCode);
-                    only1Btn.setMessage(Text.literal(getO1ButtonText(keyCode)));
+                    only1Btn.setMessage(Component.literal(getO1ButtonText(keyCode)));
                     endCapture();
                 }
                 @Override
                 public void onCaptureCancel() {
-                    only1Btn.setMessage(Text.literal(getO1ButtonText(o1Getter.getAsInt())));
+                    only1Btn.setMessage(Component.literal(getO1ButtonText(o1Getter.getAsInt())));
                     endCapture();
                 }
             };
 
-            this.allBut1Btn = ButtonWidget.builder(
-                    Text.literal(getAB1ButtonText(ab1Getter.getAsInt())),
+            this.allBut1Btn = Button.builder(
+                    Component.literal(getAB1ButtonText(ab1Getter.getAsInt())),
                     btn -> {
                         startCapture(ab1Handler);
-                        btn.setMessage(Text.literal("> Press a key <"));
+                        btn.setMessage(Component.literal("> Press a key <"));
                     }
             ).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
 
-            this.only1Btn = ButtonWidget.builder(
-                    Text.literal(getO1ButtonText(o1Getter.getAsInt())),
+            this.only1Btn = Button.builder(
+                    Component.literal(getO1ButtonText(o1Getter.getAsInt())),
                     btn -> {
                         startCapture(o1Handler);
-                        btn.setMessage(Text.literal("> Press a key <"));
+                        btn.setMessage(Component.literal("> Press a key <"));
                     }
             ).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
         }
 
         @Override
-        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+        public void render(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float delta) {
             int x = getX();
             int y = getY();
             int w = getWidth();
 
-            context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, WHITE);
+            context.drawString(font, Component.literal(label), x, y + 6, WHITE);
 
             int gap = 4;
             int btnW = only1Btn.getWidth();
@@ -903,16 +903,16 @@ public class InvTweaksConfigScreen extends Screen {
         }
 
         @Override
-        public List<? extends Element> children() { return List.of(allBut1Btn, only1Btn); }
+        public List<? extends GuiEventListener> children() { return List.of(allBut1Btn, only1Btn); }
         @Override
-        public List<? extends Selectable> selectableChildren() { return List.of(allBut1Btn, only1Btn); }
+        public List<? extends NarratableEntry> narratables() { return List.of(allBut1Btn, only1Btn); }
     }
 
     // ========== Override single entry (Advanced section: one key button per row) ==========
 
     private class OverrideSingleEntry extends ConfigEntry {
         private final String label;
-        private final ButtonWidget keyBtn;
+        private final Button keyBtn;
         private final IntSupplier getter;
         private final IntConsumer setter;
         private final CaptureHandler handler;
@@ -929,40 +929,40 @@ public class InvTweaksConfigScreen extends Screen {
                 @Override
                 public void onKeyCapture(int keyCode) {
                     setter.accept(keyCode);
-                    keyBtn.setMessage(Text.literal(getOverrideButtonText(keyCode)));
+                    keyBtn.setMessage(Component.literal(getOverrideButtonText(keyCode)));
                     endCapture();
                 }
                 @Override
                 public void onCaptureCancel() {
-                    keyBtn.setMessage(Text.literal(getOverrideButtonText(getter.getAsInt())));
+                    keyBtn.setMessage(Component.literal(getOverrideButtonText(getter.getAsInt())));
                     endCapture();
                 }
             };
 
-            this.keyBtn = ButtonWidget.builder(
-                    Text.literal(getOverrideButtonText(getter.getAsInt())),
+            this.keyBtn = Button.builder(
+                    Component.literal(getOverrideButtonText(getter.getAsInt())),
                     btn -> {
                         startCapture(handler);
-                        btn.setMessage(Text.literal("> Press a key <"));
+                        btn.setMessage(Component.literal("> Press a key <"));
                     }
             ).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
         }
 
         @Override
-        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+        public void render(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float delta) {
             int x = getX();
             int y = getY();
             int w = getWidth();
-            context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, WHITE);
+            context.drawString(font, Component.literal(label), x, y + 6, WHITE);
             keyBtn.setX(x + w - keyBtn.getWidth());
             keyBtn.setY(y);
             keyBtn.render(context, mouseX, mouseY, delta);
         }
 
         @Override
-        public List<? extends Element> children() { return List.of(keyBtn); }
+        public List<? extends GuiEventListener> children() { return List.of(keyBtn); }
         @Override
-        public List<? extends Selectable> selectableChildren() { return List.of(keyBtn); }
+        public List<? extends NarratableEntry> narratables() { return List.of(keyBtn); }
     }
 
     /**
@@ -984,7 +984,7 @@ public class InvTweaksConfigScreen extends Screen {
 
     private class ActionButtonEntry extends ConfigEntry {
         private final String label;
-        private final ButtonWidget actionBtn;
+        private final Button actionBtn;
         private final boolean isCopyButton;
 
         ActionButtonEntry(String label, Runnable action, String tooltip) {
@@ -993,14 +993,14 @@ public class InvTweaksConfigScreen extends Screen {
             this.isCopyButton = label.equals("Copy Debug Log");
 
             int btnW = scaledButtonWidth(110);
-            this.actionBtn = ButtonWidget.builder(
-                    Text.literal(label),
+            this.actionBtn = Button.builder(
+                    Component.literal(label),
                     btn -> action.run()
             ).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
         }
 
         @Override
-        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+        public void render(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float delta) {
             int x = getX();
             int y = getY();
             int w = getWidth();
@@ -1008,23 +1008,23 @@ public class InvTweaksConfigScreen extends Screen {
             if (isCopyButton && copiedTimestamp > 0) {
                 long elapsed = System.currentTimeMillis() - copiedTimestamp;
                 if (elapsed < 2000) {
-                    actionBtn.setMessage(Text.literal("\u00a7aCopied!"));
+                    actionBtn.setMessage(Component.literal("\u00a7aCopied!"));
                 } else {
                     copiedTimestamp = 0;
-                    actionBtn.setMessage(Text.literal(label));
+                    actionBtn.setMessage(Component.literal(label));
                 }
             }
 
-            context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, WHITE);
+            context.drawString(font, Component.literal(label), x, y + 6, WHITE);
             actionBtn.setX(x + w - actionBtn.getWidth());
             actionBtn.setY(y);
             actionBtn.render(context, mouseX, mouseY, delta);
         }
 
         @Override
-        public List<? extends Element> children() { return List.of(actionBtn); }
+        public List<? extends GuiEventListener> children() { return List.of(actionBtn); }
         @Override
-        public List<? extends Selectable> selectableChildren() { return List.of(actionBtn); }
+        public List<? extends NarratableEntry> narratables() { return List.of(actionBtn); }
     }
 
     // ========== Info text row (non-interactive) ==========
@@ -1040,14 +1040,14 @@ public class InvTweaksConfigScreen extends Screen {
         }
 
         @Override
-        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
-            context.drawTextWithShadow(textRenderer, Text.literal(text), getX(), getY() + 6, color);
+        public void render(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float delta) {
+            context.drawString(font, Component.literal(text), getX(), getY() + 6, color);
         }
 
         @Override
-        public List<? extends Element> children() { return List.of(); }
+        public List<? extends GuiEventListener> children() { return List.of(); }
         @Override
-        public List<? extends Selectable> selectableChildren() { return List.of(); }
+        public List<? extends NarratableEntry> narratables() { return List.of(); }
     }
 
     // ========== Integer value row with +/- buttons and keyboard edit ==========
@@ -1058,9 +1058,9 @@ public class InvTweaksConfigScreen extends Screen {
         private final int max;
         private final java.util.function.Supplier<Integer> getter;
         private final java.util.function.Consumer<Integer> setter;
-        private final ButtonWidget minusBtn;
-        private final ButtonWidget plusBtn;
-        private final ButtonWidget valueBtn;
+        private final Button minusBtn;
+        private final Button plusBtn;
+        private final Button valueBtn;
 
         private boolean editing = false;
         private String editBuffer = "";
@@ -1079,7 +1079,7 @@ public class InvTweaksConfigScreen extends Screen {
             int btnW = 20;
             int valW = 50;
 
-            this.valueBtn = ButtonWidget.builder(Text.literal(String.valueOf(getter.get())), button -> {
+            this.valueBtn = Button.builder(Component.literal(String.valueOf(getter.get())), button -> {
                 if (editing) {
                     applyEdit();
                 } else {
@@ -1087,18 +1087,18 @@ public class InvTweaksConfigScreen extends Screen {
                 }
             }).dimensions(0, 0, valW, BUTTON_HEIGHT).build();
 
-            this.minusBtn = ButtonWidget.builder(Text.literal("-"), button -> {
+            this.minusBtn = Button.builder(Component.literal("-"), button -> {
                 if (editing) cancelEdit();
                 int v = Math.max(min, getter.get() - 1);
                 setter.accept(v);
-                valueBtn.setMessage(Text.literal(String.valueOf(v)));
+                valueBtn.setMessage(Component.literal(String.valueOf(v)));
             }).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
 
-            this.plusBtn = ButtonWidget.builder(Text.literal("+"), button -> {
+            this.plusBtn = Button.builder(Component.literal("+"), button -> {
                 if (editing) cancelEdit();
                 int v = Math.min(max, getter.get() + 1);
                 setter.accept(v);
-                valueBtn.setMessage(Text.literal(String.valueOf(v)));
+                valueBtn.setMessage(Component.literal(String.valueOf(v)));
             }).dimensions(0, 0, btnW, BUTTON_HEIGHT).build();
         }
 
@@ -1110,7 +1110,7 @@ public class InvTweaksConfigScreen extends Screen {
             originalValue = getter.get();
             editBuffer = "";
             activeEditEntry = IntValueEntry.this;
-            valueBtn.setMessage(Text.literal("\u00a7e_"));
+            valueBtn.setMessage(Component.literal("\u00a7e_"));
         }
 
         void applyEdit() {
@@ -1118,18 +1118,18 @@ public class InvTweaksConfigScreen extends Screen {
             if (activeEditEntry == this) activeEditEntry = null;
             if (editBuffer.isEmpty()) {
                 setter.accept(originalValue);
-                valueBtn.setMessage(Text.literal(String.valueOf(originalValue)));
+                valueBtn.setMessage(Component.literal(String.valueOf(originalValue)));
                 InvTweaksConfig.debugLog("CONFIG", "int value edit cancelled (empty) | field=%s | restored=%d", label, originalValue);
             } else {
                 try {
                     int parsed = Integer.parseInt(editBuffer);
                     int clamped = Math.max(min, Math.min(max, parsed));
                     setter.accept(clamped);
-                    valueBtn.setMessage(Text.literal(String.valueOf(clamped)));
+                    valueBtn.setMessage(Component.literal(String.valueOf(clamped)));
                     InvTweaksConfig.debugLog("CONFIG", "int value edited | field=%s | old=%d | new=%d", label, originalValue, clamped);
                 } catch (NumberFormatException e) {
                     setter.accept(originalValue);
-                    valueBtn.setMessage(Text.literal(String.valueOf(originalValue)));
+                    valueBtn.setMessage(Component.literal(String.valueOf(originalValue)));
                 }
             }
         }
@@ -1138,7 +1138,7 @@ public class InvTweaksConfigScreen extends Screen {
             editing = false;
             if (activeEditEntry == this) activeEditEntry = null;
             setter.accept(originalValue);
-            valueBtn.setMessage(Text.literal(String.valueOf(originalValue)));
+            valueBtn.setMessage(Component.literal(String.valueOf(originalValue)));
             InvTweaksConfig.debugLog("CONFIG", "int value edit cancelled | field=%s | restored=%d", label, originalValue);
         }
 
@@ -1179,7 +1179,7 @@ public class InvTweaksConfigScreen extends Screen {
 
         private void updateEditDisplay() {
             String display = editBuffer.isEmpty() ? "\u00a7e_" : "\u00a7e" + editBuffer + "_";
-            valueBtn.setMessage(Text.literal(display));
+            valueBtn.setMessage(Component.literal(display));
         }
 
         boolean isEditing() {
@@ -1187,11 +1187,11 @@ public class InvTweaksConfigScreen extends Screen {
         }
 
         @Override
-        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+        public void render(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float delta) {
             int x = getX();
             int y = getY();
             int w = getWidth();
-            context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, WHITE);
+            context.drawString(font, Component.literal(label), x, y + 6, WHITE);
 
             int rightEdge = x + w;
             plusBtn.setX(rightEdge - plusBtn.getWidth());
@@ -1208,29 +1208,29 @@ public class InvTweaksConfigScreen extends Screen {
         }
 
         @Override
-        public List<? extends Element> children() { return List.of(minusBtn, valueBtn, plusBtn); }
+        public List<? extends GuiEventListener> children() { return List.of(minusBtn, valueBtn, plusBtn); }
         @Override
-        public List<? extends Selectable> selectableChildren() { return List.of(minusBtn, valueBtn, plusBtn); }
+        public List<? extends NarratableEntry> narratables() { return List.of(minusBtn, valueBtn, plusBtn); }
     }
 
     // ========== Cycling mode row (for sizeMismatchPasteMode) ==========
 
     private class CyclingModeEntry extends ConfigEntry {
         private final String label;
-        private final ButtonWidget cycleBtn;
+        private final Button cycleBtn;
 
-        CyclingModeEntry(String label, ButtonWidget cycleBtn, String tooltip) {
+        CyclingModeEntry(String label, Button cycleBtn, String tooltip) {
             super(tooltip);
             this.label = label;
             this.cycleBtn = cycleBtn;
         }
 
         @Override
-        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float delta) {
+        public void render(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float delta) {
             int x = getX();
             int y = getY();
             int w = getWidth();
-            context.drawTextWithShadow(textRenderer, Text.literal(label), x, y + 6, WHITE);
+            context.drawString(font, Component.literal(label), x, y + 6, WHITE);
             int btnX = x + w - cycleBtn.getWidth();
             cycleBtn.setX(btnX);
             cycleBtn.setY(y);
@@ -1238,9 +1238,9 @@ public class InvTweaksConfigScreen extends Screen {
         }
 
         @Override
-        public List<? extends Element> children() { return List.of(cycleBtn); }
+        public List<? extends GuiEventListener> children() { return List.of(cycleBtn); }
         @Override
-        public List<? extends Selectable> selectableChildren() { return List.of(cycleBtn); }
+        public List<? extends NarratableEntry> narratables() { return List.of(cycleBtn); }
     }
 
     // ========== Key press routing ==========
