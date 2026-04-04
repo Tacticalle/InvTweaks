@@ -134,8 +134,8 @@ public class HalfSelectorOverlay {
         rightGridH = gridH;
 
         // Get mouse position
-        double mouseX = mc.mouseHandler.xpos() * screenWidth / mc.getWindow().getWidth();
-        double mouseY = mc.mouseHandler.ypos() * screenHeight / mc.getWindow().getHeight();
+        double mouseX = mc.mouseHandler.getScaledXPos(mc.getWindow());
+        double mouseY = mc.mouseHandler.getScaledYPos(mc.getWindow());
 
         boolean hoverLeft = mouseX >= leftGridX - 4 && mouseX <= leftGridX + leftGridW + 4
                 && mouseY >= leftGridY - 4 && mouseY <= leftGridY + leftGridH + 4;
@@ -216,8 +216,9 @@ public class HalfSelectorOverlay {
             renderPreviewSlot(context, font, null, sx, sy, SLOT_SIZE);
         }
 
-        // Hover highlight overlay
+        // Hover highlight overlay — nextStratum() ensures it renders above items
         if (hovered) {
+            context.nextStratum();
             context.fill(gridX - 3, gridY - 3, gridX + gridW + 3, gridY + gridH + 3, HOVER_HIGHLIGHT);
         }
     }

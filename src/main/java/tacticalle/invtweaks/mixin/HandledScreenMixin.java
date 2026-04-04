@@ -968,7 +968,7 @@ public abstract class HandledScreenMixin {
         int midpoint = (containerTopPx + containerBottomPx) / 2;
 
         Minecraft mc = Minecraft.getInstance();
-        double mouseY = mc.mouseHandler.ypos() * mc.getWindow().getGuiScaledHeight() / mc.getWindow().getHeight();
+        double mouseY = mc.mouseHandler.getScaledYPos(mc.getWindow());
 
         InvTweaksConfig.debugLog("SIZE-MISMATCH", "hover: mouseY=%.0f | containerTop=%d | containerBottom=%d | midpoint=%d",
                 mouseY, containerTopPx, containerBottomPx, midpoint);
