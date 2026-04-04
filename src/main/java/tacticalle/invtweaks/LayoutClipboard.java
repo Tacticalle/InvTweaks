@@ -171,13 +171,13 @@ public class LayoutClipboard {
                                             boolean isPlayerOnly) {
         Map<Integer, ItemStack> slotStates = new HashMap<>();
         for (int i = 0; i < handler.slots.size(); i++) {
-            slotStates.put(i, handler.getSlot(i).getStack().copy());
+            slotStates.put(i, handler.getSlot(i).getItem().copy());
         }
 
         Map<Integer, Boolean> crafterLockStates = null;
         if (category == ContainerClassifier.ContainerCategory.CRAFTER) {
             crafterLockStates = new HashMap<>();
-            if (handler instanceof net.minecraft.screen.CrafterMenu crafterHandler) {
+            if (handler instanceof net.minecraft.world.inventory.CrafterMenu crafterHandler) {
                 for (int i = 0; i < 9; i++) {
                     try {
                         crafterLockStates.put(i, crafterHandler.isSlotDisabled(i));
@@ -240,7 +240,7 @@ public class LayoutClipboard {
         ItemStack cursorStack = handler.getCarried();
         if (cursorStack != null && !cursorStack.isEmpty()) {
             for (int i = 0; i < handler.slots.size(); i++) {
-                if (handler.getSlot(i).getStack().isEmpty()) {
+                if (handler.getSlot(i).getItem().isEmpty()) {
                     im.clickSlot(handler.containerId, i, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.PICKUP, player);
                     cursorStashSlot = i;
                     InvTweaksConfig.debugLog("UNDO", "stashed cursor in slot %d", i);
@@ -259,7 +259,7 @@ public class LayoutClipboard {
             if (slotIdx >= handler.slots.size()) continue;
             if (slotIdx == cursorStashSlot) continue;
             ItemStack snapshotStack = entry.getValue();
-            ItemStack currentStack = handler.getSlot(slotIdx).getStack();
+            ItemStack currentStack = handler.getSlot(slotIdx).getItem();
             if (!ItemStack.isSameItemSameComponents(snapshotStack, currentStack)
                     || snapshotStack.getCount() != currentStack.getCount()) {
                 diffSlots.add(slotIdx);
@@ -282,7 +282,7 @@ public class LayoutClipboard {
             if (i == cursorStashSlot) continue;
             ItemStack snapshotStack = snapshot.slotStates.get(i);
             if (snapshotStack == null) snapshotStack = ItemStack.EMPTY;
-            ItemStack currentStack = handler.getSlot(i).getStack();
+            ItemStack currentStack = handler.getSlot(i).getItem();
             if (!ItemStack.isSameItemSameComponents(snapshotStack, currentStack)
                     || snapshotStack.getCount() != currentStack.getCount()) {
                 diffSlotSet.add(i);
@@ -292,7 +292,7 @@ public class LayoutClipboard {
         // Available sources: diff slots that currently hold items
         LinkedHashSet<Integer> availableSources = new LinkedHashSet<>();
         for (int slot : diffSlotSet) {
-            if (!handler.getSlot(slot).getStack().isEmpty()) {
+            if (!handler.getSlot(slot).getItem().isEmpty()) {
                 availableSources.add(slot);
             }
         }
@@ -305,7 +305,7 @@ public class LayoutClipboard {
             if (snapshotStack == null) snapshotStack = ItemStack.EMPTY;
             if (!snapshotStack.isEmpty()) {
                 targetsNeedingItems.add(slot);
-            } else if (!handler.getSlot(slot).getStack().isEmpty()) {
+            } else if (!handler.getSlot(slot).getItem().isEmpty()) {
                 targetsNeedingEmpty.add(slot);
             }
         }
@@ -315,7 +315,7 @@ public class LayoutClipboard {
             ItemStack snapshotStack = snapshot.slotStates.get(target);
             int needed = snapshotStack.getCount();
 
-            ItemStack currentTarget = handler.getSlot(target).getStack();
+            ItemStack currentTarget = handler.getSlot(target).getItem();
             int currentCount = 0;
 
             if (!currentTarget.isEmpty()) {
@@ -339,7 +339,7 @@ public class LayoutClipboard {
             while (sourceIter.hasNext() && currentCount < needed) {
                 int source = sourceIter.next();
                 if (source == target) continue;
-                ItemStack sourceStack = handler.getSlot(source).getStack();
+                ItemStack sourceStack = handler.getSlot(source).getItem();
                 if (sourceStack.isEmpty()) {
                     sourceIter.remove();
                     continue;
@@ -373,7 +373,7 @@ public class LayoutClipboard {
                     if (cursorCheck != null && !cursorCheck.isEmpty()) {
                         for (int i = 0; i < handler.slots.size(); i++) {
                             if (i == cursorStashSlot) continue;
-                            if (handler.getSlot(i).getStack().isEmpty()) {
+                            if (handler.getSlot(i).getItem().isEmpty()) {
                                 im.clickSlot(handler.containerId, i, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.PICKUP, player);
                                 availableSources.add(i);
                                 break;
@@ -389,7 +389,7 @@ public class LayoutClipboard {
         // Phase 2b: Empty slots that should be empty
         // Many are already empty after their items were consumed as sources above
         for (int target : targetsNeedingEmpty) {
-            if (!handler.getSlot(target).getStack().isEmpty()) {
+            if (!handler.getSlot(target).getItem().isEmpty()) {
                 im.clickSlot(handler.containerId, target, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.QUICK_MOVE, player);
             }
         }
@@ -398,7 +398,7 @@ public class LayoutClipboard {
         // items can be picked up from unlocked slots before locks are re-applied.
         if (snapshot.category == ContainerClassifier.ContainerCategory.CRAFTER
                 && snapshot.crafterLockStates != null
-                && handler instanceof net.minecraft.screen.CrafterMenu crafterHandler) {
+                && handler instanceof net.minecraft.world.inventory.CrafterMenu crafterHandler) {
             for (Map.Entry<Integer, Boolean> entry : snapshot.crafterLockStates.entrySet()) {
                 int slotIdx = entry.getKey();
                 boolean wantDisabled = entry.getValue();
@@ -423,7 +423,7 @@ public class LayoutClipboard {
             if (stashSnapshot == null) stashSnapshot = ItemStack.EMPTY;
 
             // Step 1: Pick up cursor item from stash slot (restores cursor)
-            if (!handler.getSlot(cursorStashSlot).getStack().isEmpty()) {
+            if (!handler.getSlot(cursorStashSlot).getItem().isEmpty()) {
                 im.clickSlot(handler.containerId, cursorStashSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.PICKUP, player);
             }
             // Cursor now holds original cursor item. Stash slot is empty.
@@ -436,7 +436,7 @@ public class LayoutClipboard {
                 int tempSlot = -1;
                 for (int i = 0; i < handler.slots.size(); i++) {
                     if (i == cursorStashSlot) continue;
-                    if (handler.getSlot(i).getStack().isEmpty()) {
+                    if (handler.getSlot(i).getItem().isEmpty()) {
                         tempSlot = i;
                         break;
                     }
@@ -451,7 +451,7 @@ public class LayoutClipboard {
                     final ItemStack stashSnapshotFinal = stashSnapshot;
                     for (int i = 0; i < handler.slots.size(); i++) {
                         if (i == cursorStashSlot || i == tempSlot) continue;
-                        ItemStack candidateCurrent = handler.getSlot(i).getStack();
+                        ItemStack candidateCurrent = handler.getSlot(i).getItem();
                         ItemStack candidateSnapshot = snapshot.slotStates.get(i);
                         if (candidateSnapshot == null) candidateSnapshot = ItemStack.EMPTY;
                         if (ItemStack.isSameItemSameComponents(candidateCurrent, candidateSnapshot)
@@ -466,7 +466,7 @@ public class LayoutClipboard {
                     }
 
                     // Step 5: Pick cursor item back up from temp
-                    if (!handler.getSlot(tempSlot).getStack().isEmpty()) {
+                    if (!handler.getSlot(tempSlot).getItem().isEmpty()) {
                         im.clickSlot(handler.containerId, tempSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.PICKUP, player);
                     }
                     // Cursor now holds original cursor item.
@@ -486,7 +486,7 @@ public class LayoutClipboard {
         for (int slotIdx : checkSlots) {
             if (slotIdx >= handler.slots.size()) continue;
             ItemStack snapshotStack = snapshot.slotStates.get(slotIdx);
-            ItemStack currentStack = handler.getSlot(slotIdx).getStack();
+            ItemStack currentStack = handler.getSlot(slotIdx).getItem();
             if (snapshotStack == null) snapshotStack = ItemStack.EMPTY;
             if (ItemStack.isSameItemSameComponents(snapshotStack, currentStack)
                     && snapshotStack.getCount() == currentStack.getCount()) {
@@ -510,7 +510,7 @@ public class LayoutClipboard {
     private static int findAnyEmptySlot(AbstractContainerMenu handler, int exclude1, int exclude2) {
         for (int i = 0; i < handler.slots.size(); i++) {
             if (i == exclude1 || i == exclude2) continue;
-            if (handler.getSlot(i).getStack().isEmpty()) return i;
+            if (handler.getSlot(i).getItem().isEmpty()) return i;
         }
         return -1;
     }
@@ -923,8 +923,8 @@ public class LayoutClipboard {
         if (stack.isEmpty()) return null;
         try {
             Minecraft mc = Minecraft.getInstance();
-            if (mc.world == null) return null;
-            RegistryOps<Tag> ops = RegistryOps.of(NbtOps.INSTANCE, mc.world.registryAccess());
+            if (mc.level == null) return null;
+            RegistryOps<Tag> ops = RegistryOps.of(NbtOps.INSTANCE, mc.level.registryAccess());
             var result = ItemStack.CODEC.encodeStart(ops, stack);
             Tag nbt = result.result().orElse(null);
             if (nbt instanceof CompoundTag compound) {
@@ -948,11 +948,11 @@ public class LayoutClipboard {
         if (components == null) return new ItemStack(item, count);
         try {
             Minecraft mc = Minecraft.getInstance();
-            if (mc.world == null) return new ItemStack(item, count);
-            String itemId = BuiltInRegistries.ITEM.getId(item).toString();
+            if (mc.level == null) return new ItemStack(item, count);
+            String itemId = BuiltInRegistries.ITEM.getKey(item).toString();
             String nbtStr = "{id:\"" + itemId + "\",count:" + count + ",components:" + components + "}";
             Tag nbt = NbtUtils.snbtToStructure(nbtStr);
-            RegistryOps<Tag> ops = RegistryOps.of(NbtOps.INSTANCE, mc.world.registryAccess());
+            RegistryOps<Tag> ops = RegistryOps.of(NbtOps.INSTANCE, mc.level.registryAccess());
             var result = ItemStack.CODEC.parse(ops, nbt);
             ItemStack reconstructed = result.result().orElse(null);
             if (reconstructed != null && !reconstructed.isEmpty()) {
@@ -1299,7 +1299,7 @@ public class LayoutClipboard {
             for (int i = 9; i <= 35; i++) {
                 if (i >= handler.slots.size()) break;
                 Slot slot = handler.slots.get(i);
-                ItemStack stack = slot.getStack();
+                ItemStack stack = slot.getItem();
                 if (stack.isEmpty()) {
                     slots.put(i, new SlotData(null, 0, null));
                 } else {
@@ -1310,7 +1310,7 @@ public class LayoutClipboard {
             for (int i = 36; i <= 44; i++) {
                 if (i >= handler.slots.size()) break;
                 Slot slot = handler.slots.get(i);
-                ItemStack stack = slot.getStack();
+                ItemStack stack = slot.getItem();
                 int playerSlot = i - 36; // maps to 0-8
                 if (stack.isEmpty()) {
                     slots.put(playerSlot, new SlotData(null, 0, null));
@@ -1322,7 +1322,7 @@ public class LayoutClipboard {
             for (int i = 5; i <= 8; i++) {
                 if (i >= handler.slots.size()) break;
                 Slot slot = handler.slots.get(i);
-                ItemStack stack = slot.getStack();
+                ItemStack stack = slot.getItem();
                 int snapshotKey = 36 + (i - 5); // 5→36, 6→37, 7→38, 8→39
                 if (stack.isEmpty()) {
                     slots.put(snapshotKey, new SlotData(null, 0, null));
@@ -1333,7 +1333,7 @@ public class LayoutClipboard {
             // Offhand: handler slot 45 → snapshot key 40
             if (45 < handler.slots.size()) {
                 Slot slot = handler.slots.get(45);
-                ItemStack stack = slot.getStack();
+                ItemStack stack = slot.getItem();
                 if (stack.isEmpty()) {
                     slots.put(40, new SlotData(null, 0, null));
                 } else {
@@ -1343,8 +1343,8 @@ public class LayoutClipboard {
         } else {
             for (int i = 0; i < handler.slots.size(); i++) {
                 Slot slot = handler.slots.get(i);
-                if (slot.inventory instanceof Inventory) continue;
-                ItemStack stack = slot.getStack();
+                if (slot.container instanceof Inventory) continue;
+                ItemStack stack = slot.getItem();
                 if (stack.isEmpty()) {
                     slots.put(i, new SlotData(null, 0, null));
                 } else {
@@ -1397,7 +1397,7 @@ public class LayoutClipboard {
                 for (int i = 1; i <= 9; i++) {
                     if (i >= handler.slots.size()) break;
                     Slot slot = handler.slots.get(i);
-                    ItemStack stack = slot.getStack();
+                    ItemStack stack = slot.getItem();
                     int key = i - 1;
                     if (stack.isEmpty()) {
                         slots.put(key, new SlotData(null, 0, null));
@@ -1413,7 +1413,7 @@ public class LayoutClipboard {
                 for (int i = 0; i <= 1; i++) {
                     if (i >= handler.slots.size()) break;
                     Slot slot = handler.slots.get(i);
-                    ItemStack stack = slot.getStack();
+                    ItemStack stack = slot.getItem();
                     if (stack.isEmpty()) {
                         slots.put(i, new SlotData(null, 0, null));
                     } else {
@@ -1428,7 +1428,7 @@ public class LayoutClipboard {
                 for (int i = 0; i < 9; i++) {
                     if (i >= handler.slots.size()) break;
                     boolean isLocked = false;
-                    if (handler instanceof net.minecraft.screen.CrafterMenu crafterHandler) {
+                    if (handler instanceof net.minecraft.world.inventory.CrafterMenu crafterHandler) {
                         try {
                             isLocked = crafterHandler.isSlotDisabled(i);
                         } catch (Exception e) {
@@ -1440,7 +1440,7 @@ public class LayoutClipboard {
                         InvTweaksConfig.debugLog("CRAFTER", "slot %d is locked", i);
                     } else {
                         Slot slot = handler.slots.get(i);
-                        ItemStack stack = slot.getStack();
+                        ItemStack stack = slot.getItem();
                         if (stack.isEmpty()) {
                             slots.put(i, new SlotData(null, 0, null));
                         } else {
@@ -1454,8 +1454,8 @@ public class LayoutClipboard {
                 // GRID9, HOPPER, STANDARD: copy all container slots as normal
                 for (int i = 0; i < handler.slots.size(); i++) {
                     Slot slot = handler.slots.get(i);
-                    if (slot.inventory instanceof Inventory) continue;
-                    ItemStack stack = slot.getStack();
+                    if (slot.container instanceof Inventory) continue;
+                    ItemStack stack = slot.getItem();
                     if (stack.isEmpty()) {
                         slots.put(i, new SlotData(null, 0, null));
                     } else {
@@ -1652,7 +1652,7 @@ public class LayoutClipboard {
             List<Integer> containerSlotIds = new ArrayList<>();
             for (int i = 0; i < handler.slots.size(); i++) {
                 Slot slot = handler.slots.get(i);
-                if (!(slot.inventory instanceof Inventory)) {
+                if (!(slot.container instanceof Inventory)) {
                     containerSlotIds.add(i);
                 }
             }
@@ -1680,8 +1680,8 @@ public class LayoutClipboard {
         if (!isPlayerOnly) {
             for (int i = 0; i < handler.slots.size(); i++) {
                 Slot slot = handler.slots.get(i);
-                if (slot.inventory instanceof Inventory) {
-                    int invIdx = slot.getIndex();
+                if (slot.container instanceof Inventory) {
+                    int invIdx = slot.getContainerSlot();
                     if (invIdx >= 0 && invIdx <= 44) {
                         allAccessibleSlots.add(i);
                     }
@@ -1703,7 +1703,7 @@ public class LayoutClipboard {
             SlotData desired = entry.getValue();
             if (desired.item() == null) continue;
             for (int slotId : allAccessibleSlots) {
-                ItemStack stack = handler.slots.get(slotId).getStack();
+                ItemStack stack = handler.slots.get(slotId).getItem();
                 if (!stack.isEmpty() && stack.getItem() == desired.item()) {
                     availableMatchCount++;
                     break;
@@ -1731,7 +1731,7 @@ public class LayoutClipboard {
         for (Map.Entry<Integer, SlotData> entry : targetLayout.entrySet()) {
             int slotId = entry.getKey();
             SlotData desired = entry.getValue();
-            ItemStack current = handler.slots.get(slotId).getStack();
+            ItemStack current = handler.slots.get(slotId).getItem();
             if (desired.item() == null) {
                 if (!current.isEmpty() && clipboardItemTypes.contains(current.getItem())) {
                     alreadyMatches = false; break;
@@ -1782,13 +1782,13 @@ public class LayoutClipboard {
                 int slotId = entry.getKey();
                 SlotData desired = entry.getValue();
                 if (desired.item() == null) continue;
-                ItemStack current = handler.slots.get(slotId).getStack();
+                ItemStack current = handler.slots.get(slotId).getItem();
                 int maxStack = current.getMaxStackSize();
                 if (current.getCount() < maxStack) {
                     // Check if surplus items of this type exist elsewhere
                     for (int srcSlot : allAccessibleSlots) {
                         if (srcSlot == slotId) continue;
-                        ItemStack srcStack = handler.slots.get(srcSlot).getStack();
+                        ItemStack srcStack = handler.slots.get(srcSlot).getItem();
                         if (!srcStack.isEmpty() && srcStack.getItem() == desired.item()) {
                             // A source has surplus if it's not a target for this item type
                             SlotData srcTarget = targetLayout.get(srcSlot);
@@ -1822,7 +1822,7 @@ public class LayoutClipboard {
         // Stash cursor item in a non-target empty slot so normal paste logic can run
         if (cursorOccupied) {
             for (int slotId : allAccessibleSlots) {
-                if (!targetLayout.containsKey(slotId) && handler.slots.get(slotId).getStack().isEmpty()) {
+                if (!targetLayout.containsKey(slotId) && handler.slots.get(slotId).getItem().isEmpty()) {
                     cursorStashSlot = slotId;
                     break;
                 }
@@ -1851,7 +1851,7 @@ public class LayoutClipboard {
                 if (desired.item() == null) continue;
                 Integer desiredQty = quantityOverrides.get(slotId);
                 if (desiredQty == null) continue;
-                ItemStack current = handler.slots.get(slotId).getStack();
+                ItemStack current = handler.slots.get(slotId).getItem();
                 if (current.isEmpty() || current.getItem() != desired.item()) continue;
                 if (desired.components() != null) {
                     String currentComp = serializeComponents(current);
@@ -1908,7 +1908,7 @@ public class LayoutClipboard {
                     if (!failedSlots.contains(slotId)) {
                         SlotData desired = entry.getValue();
                         if (desired.item() != null) {
-                            ItemStack current = handler.slots.get(slotId).getStack();
+                            ItemStack current = handler.slots.get(slotId).getItem();
                             if (!current.isEmpty() && current.getItem() == desired.item()) {
                                 pass1FilledSlots.add(slotId);
                             }
@@ -1983,7 +1983,7 @@ public class LayoutClipboard {
                 }
             }
 
-            ItemStack currentStack = handler.slots.get(targetSlotId).getStack();
+            ItemStack currentStack = handler.slots.get(targetSlotId).getItem();
 
             if (desired.item() == null) {
                 if (currentStack.isEmpty()) {
@@ -2096,11 +2096,11 @@ public class LayoutClipboard {
         int moved = 0;
         for (int i = 0; i < handler.slots.size(); i++) {
             Slot slot = handler.slots.get(i);
-            if (slot.inventory instanceof Inventory) continue;
-            if (slot.getStack().isEmpty()) continue;
+            if (slot.container instanceof Inventory) continue;
+            if (slot.getItem().isEmpty()) continue;
 
             InvTweaksConfig.debugLog("CUT", "QUICK_MOVE slot=%d | item=%s | count=%d",
-                    i, slot.getStack().getItem(), slot.getStack().getCount());
+                    i, slot.getItem().getItem(), slot.getItem().getCount());
             im.clickSlot(handler.containerId, i, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.QUICK_MOVE, player);
             moved++;
         }
@@ -2134,7 +2134,7 @@ public class LayoutClipboard {
                 // Only extract from input slots 1-9 (skip output slot 0)
                 for (int i = 1; i <= 9; i++) {
                     if (i >= handler.slots.size()) break;
-                    if (handler.slots.get(i).getStack().isEmpty()) continue;
+                    if (handler.slots.get(i).getItem().isEmpty()) continue;
                     im.clickSlot(handler.containerId, i, 0, ClickType.QUICK_MOVE, player);
                     moved++;
                 }
@@ -2143,7 +2143,7 @@ public class LayoutClipboard {
                 // Only extract from input (slot 0) and fuel (slot 1), skip output (slot 2)
                 for (int i = 0; i <= 1; i++) {
                     if (i >= handler.slots.size()) break;
-                    if (handler.slots.get(i).getStack().isEmpty()) continue;
+                    if (handler.slots.get(i).getItem().isEmpty()) continue;
                     im.clickSlot(handler.containerId, i, 0, ClickType.QUICK_MOVE, player);
                     moved++;
                 }
@@ -2152,8 +2152,8 @@ public class LayoutClipboard {
                 // All container slots (same as original)
                 for (int i = 0; i < handler.slots.size(); i++) {
                     Slot slot = handler.slots.get(i);
-                    if (slot.inventory instanceof Inventory) continue;
-                    if (slot.getStack().isEmpty()) continue;
+                    if (slot.container instanceof Inventory) continue;
+                    if (slot.getItem().isEmpty()) continue;
                     im.clickSlot(handler.containerId, i, 0, ClickType.QUICK_MOVE, player);
                     moved++;
                 }
@@ -2256,14 +2256,14 @@ public class LayoutClipboard {
      */
     private static boolean moveItemOutQuickMove(AbstractContainerMenu handler, MultiPlayerGameMode im,
                                                  Player player, int targetSlotId) {
-        ItemStack stack = handler.slots.get(targetSlotId).getStack();
+        ItemStack stack = handler.slots.get(targetSlotId).getItem();
         if (stack.isEmpty()) return true;
 
         InvTweaksConfig.debugLog("PASTE", "moveOutQuickMove slot=%d | item=%s | count=%d", targetSlotId, stack.getItem(), stack.getCount());
         im.clickSlot(handler.containerId, targetSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.QUICK_MOVE, player);
 
         // Check if it was moved
-        ItemStack after = handler.slots.get(targetSlotId).getStack();
+        ItemStack after = handler.slots.get(targetSlotId).getItem();
         if (after.isEmpty()) return true;
 
         InvTweaksConfig.debugLog("PASTE", "moveOutQuickMove FAILED slot=%d | still has %s x%d", targetSlotId, after.getItem(), after.getCount());
@@ -2288,7 +2288,7 @@ public class LayoutClipboard {
                 desiredComponents, allAccessible, targetLayout);
 
         for (int srcSlot : rankedSources) {
-            ItemStack srcStack = handler.slots.get(srcSlot).getStack();
+            ItemStack srcStack = handler.slots.get(srcSlot).getItem();
             if (srcStack.isEmpty() || srcStack.getItem() != itemType) continue;
 
             // Ranking already handles matching quality — no post-filter needed.
@@ -2314,7 +2314,7 @@ public class LayoutClipboard {
             im.clickSlot(handler.containerId, srcSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.QUICK_MOVE, player);
 
             // Check if the target slot now has the item
-            ItemStack targetAfter = handler.slots.get(targetSlotId).getStack();
+            ItemStack targetAfter = handler.slots.get(targetSlotId).getItem();
             if (!targetAfter.isEmpty() && targetAfter.getItem() == itemType) {
                 return true;
             }
@@ -2371,7 +2371,7 @@ public class LayoutClipboard {
         switch (category) {
             case CRAFTER -> {
                 // Phase 1: Match lock state before placing items
-                if (handler instanceof net.minecraft.screen.CrafterMenu crafterHandler) {
+                if (handler instanceof net.minecraft.world.inventory.CrafterMenu crafterHandler) {
                     Minecraft mc = Minecraft.getInstance();
                     MultiPlayerGameMode im = mc.gameMode;
                     Player player = mc.player;
@@ -2485,7 +2485,7 @@ public class LayoutClipboard {
             String desiredComponents = componentsByType.get(typeKey);
             int available = 0;
             for (int slotId : allAccessibleSlots) {
-                ItemStack stack = handler.slots.get(slotId).getStack();
+                ItemStack stack = handler.slots.get(slotId).getItem();
                 if (stack.isEmpty() || stack.getItem() != itemType) continue;
                 if (desiredComponents != null) {
                     String srcComponents = serializeComponents(stack);
@@ -2525,7 +2525,7 @@ public class LayoutClipboard {
                                         Player player, int targetSlotId,
                                         Set<Integer> allAccessible, Map<Integer, SlotData> targetLayout,
                                         boolean isPlayerOnly) {
-        ItemStack stack = handler.slots.get(targetSlotId).getStack();
+        ItemStack stack = handler.slots.get(targetSlotId).getItem();
         if (stack.isEmpty()) return true;
 
         Item itemType = stack.getItem();
@@ -2538,7 +2538,7 @@ public class LayoutClipboard {
         int smartDest = -1;
         for (int i : allAccessible) {
             if (i == targetSlotId) continue;
-            if (!handler.slots.get(i).getStack().isEmpty()) continue;
+            if (!handler.slots.get(i).getItem().isEmpty()) continue;
             SlotData destTarget = targetLayout.get(i);
             if (destTarget != null && destTarget.item() == itemType) {
                 // Check component match if tracked — accept identity/content-similar matches
@@ -2581,7 +2581,7 @@ public class LayoutClipboard {
 
         for (int i : allAccessible) {
             if (i == targetSlotId) continue;
-            ItemStack destStack = handler.slots.get(i).getStack();
+            ItemStack destStack = handler.slots.get(i).getItem();
             if (!destStack.isEmpty() && destStack.getItem() == itemType
                     && destStack.getCount() < destStack.getMaxStackSize()) {
                 InvTweaksConfig.debugLog("PASTE", "moveOut slot=%d -> partial=%d", targetSlotId, i);
@@ -2653,7 +2653,7 @@ public class LayoutClipboard {
         for (int srcSlot : rankedSources) {
             if (remaining <= 0) break;
 
-            ItemStack srcStack = handler.slots.get(srcSlot).getStack();
+            ItemStack srcStack = handler.slots.get(srcSlot).getItem();
             if (srcStack.isEmpty() || srcStack.getItem() != itemType) continue;
 
             // Only exact-component matches for quantity maximization
@@ -2688,7 +2688,7 @@ public class LayoutClipboard {
                 im.clickSlot(handler.containerId, targetSlotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.PICKUP, player);
                 if (!handler.getCarried().isEmpty()) {
                     im.clickSlot(handler.containerId, srcSlot, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.PICKUP, player);
-                    remaining -= (toTake - handler.slots.get(srcSlot).getStack().getCount());
+                    remaining -= (toTake - handler.slots.get(srcSlot).getItem().getCount());
                 } else {
                     remaining -= toTake;
                 }
@@ -2739,7 +2739,7 @@ public class LayoutClipboard {
         for (int srcSlot : rankedSources) {
             if (remaining <= 0) break;
 
-            ItemStack srcStack = handler.slots.get(srcSlot).getStack();
+            ItemStack srcStack = handler.slots.get(srcSlot).getItem();
             if (srcStack.isEmpty() || srcStack.getItem() != itemType) continue;
 
             // Ranking already handles matching quality — no post-filter needed.
@@ -2881,7 +2881,7 @@ public class LayoutClipboard {
         for (int srcSlot : allAccessible) {
             if (srcSlot == targetSlotId) continue;
             if (protectedSlots.contains(srcSlot)) continue;
-            ItemStack srcStack = handler.slots.get(srcSlot).getStack();
+            ItemStack srcStack = handler.slots.get(srcSlot).getItem();
             if (srcStack.isEmpty() || srcStack.getItem() != itemType) continue;
 
             boolean inTargetPosition = false;
@@ -2960,8 +2960,8 @@ public class LayoutClipboard {
     private static boolean isHotbarSlot(AbstractContainerMenu handler, int slotId) {
         if (slotId < 0 || slotId >= handler.slots.size()) return false;
         Slot slot = handler.slots.get(slotId);
-        if (slot.inventory instanceof Inventory) {
-            int invIdx = slot.getIndex();
+        if (slot.container instanceof Inventory) {
+            int invIdx = slot.getContainerSlot();
             return invIdx >= 0 && invIdx <= 8;
         }
         return false;
@@ -2975,21 +2975,21 @@ public class LayoutClipboard {
             if (targetLayout.containsKey(i)) continue;
             if (isHotbarSlot(handler, i)) continue;
             if (isArmorOrOffhandSlot(i)) continue;
-            if (handler.slots.get(i).getStack().isEmpty()) return i;
+            if (handler.slots.get(i).getItem().isEmpty()) return i;
         }
         // Second pass: non-target hotbar empty slots (fallback, still skip armor/offhand)
         for (int i : allAccessible) {
             if (i == excludeSlot) continue;
             if (targetLayout.containsKey(i)) continue;
             if (isArmorOrOffhandSlot(i)) continue;
-            if (handler.slots.get(i).getStack().isEmpty()) return i;
+            if (handler.slots.get(i).getItem().isEmpty()) return i;
         }
         // Third pass: target slots that want to be empty (skip armor/offhand)
         for (int i : allAccessible) {
             if (i == excludeSlot) continue;
             if (isArmorOrOffhandSlot(i)) continue;
             SlotData target = targetLayout.get(i);
-            if (target != null && target.item() == null && handler.slots.get(i).getStack().isEmpty()) return i;
+            if (target != null && target.item() == null && handler.slots.get(i).getItem().isEmpty()) return i;
         }
         return findAnyEmptySlot(handler, allAccessible, excludeSlot);
     }
@@ -3004,13 +3004,13 @@ public class LayoutClipboard {
             if (i == excludeSlot) continue;
             if (isHotbarSlot(handler, i)) continue;
             if (isArmorOrOffhandSlot(i)) continue;
-            if (handler.slots.get(i).getStack().isEmpty()) return i;
+            if (handler.slots.get(i).getItem().isEmpty()) return i;
         }
         // Fallback: hotbar slots (still skip armor/offhand)
         for (int i : allAccessible) {
             if (i == excludeSlot) continue;
             if (isArmorOrOffhandSlot(i)) continue;
-            if (handler.slots.get(i).getStack().isEmpty()) return i;
+            if (handler.slots.get(i).getItem().isEmpty()) return i;
         }
         return -1;
     }
@@ -3070,7 +3070,7 @@ public class LayoutClipboard {
         int count = 0;
         for (int i = 0; i < handler.slots.size(); i++) {
             Slot slot = handler.slots.get(i);
-            if (!(slot.inventory instanceof Inventory)) {
+            if (!(slot.container instanceof Inventory)) {
                 count++;
             }
         }
@@ -3233,7 +3233,7 @@ public class LayoutClipboard {
         for (int i = 0; i < handler.slots.size(); i++) {
             if (i == bundleSlotId) continue;
             Slot slot = handler.slots.get(i);
-            ItemStack stack = slot.getStack();
+            ItemStack stack = slot.getItem();
             // Don't pull from other bundles
             if (!stack.isEmpty() && stack.getItem() instanceof BundleItem) continue;
             sourceSlots.add(i);
@@ -3259,7 +3259,7 @@ public class LayoutClipboard {
             }
 
             // Pick up from source slot
-            ItemStack sourceStack = handler.slots.get(sourceSlot).getStack();
+            ItemStack sourceStack = handler.slots.get(sourceSlot).getItem();
             int sourceCount = sourceStack.getCount();
             int wantCount = desired.count();
 
@@ -3277,7 +3277,7 @@ public class LayoutClipboard {
                     InvTweaksConfig.debugLog("BUNDLE-PASTE", "bundle full, returned items to slot %d", sourceSlot);
 
                     // Check if any items were actually inserted
-                    ItemStack afterReturn = handler.slots.get(sourceSlot).getStack();
+                    ItemStack afterReturn = handler.slots.get(sourceSlot).getItem();
                     if (afterReturn.getCount() < sourceCount) {
                         inserted++;
                         InvTweaksConfig.debugLog("BUNDLE-PASTE", "partial insert success (position %d)", key);
@@ -3334,7 +3334,7 @@ public class LayoutClipboard {
         int typeMatch = -1;
 
         for (int slotId : sourceSlots) {
-            ItemStack stack = handler.slots.get(slotId).getStack();
+            ItemStack stack = handler.slots.get(slotId).getItem();
             if (stack.isEmpty() || stack.getItem() != desired.item()) continue;
 
             if (desired.components() != null && !desired.components().isEmpty()) {

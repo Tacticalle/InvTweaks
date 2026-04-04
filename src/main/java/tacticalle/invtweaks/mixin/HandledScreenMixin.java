@@ -98,7 +98,7 @@ public abstract class HandledScreenMixin {
 
         // Throwing tweaks: modifier + Q (THROW action) in GUI
         if (actionType == ClickType.THROW && config.enableThrowHalf) {
-            ItemStack slotStack = slot.getStack();
+            ItemStack slotStack = slot.getItem();
             if (!slotStack.isEmpty() && slotStack.getCount() > 1) {
                 boolean throwHalf = config.isThrowHalfKeyPressed();
                 boolean throwAB1 = config.isThrowAllBut1KeyPressed();
@@ -147,7 +147,7 @@ public abstract class HandledScreenMixin {
         if (actionType == ClickType.SWAP) {
             String hotbarMode = config.getActiveMode("hotbarModifiers");
             if (hotbarMode != null) {
-                ItemStack sourceStack = slot.getStack();
+                ItemStack sourceStack = slot.getItem();
                 if (sourceStack.isEmpty()) return; // nothing to move
                 if (sourceStack.getCount() <= 1) return; // only 1 item, just do vanilla swap
 
@@ -163,7 +163,7 @@ public abstract class HandledScreenMixin {
 
                 if (config.enableDebugLogging) InvTweaksConfig.debugLog("HOTBAR", "mode=%s | sourceSlot=%d | hotbarSlot=%d | hotbarIndex=%d", hotbarMode, slotId, hotbarSlotId, hotbarIndex);
 
-                ItemStack hotbarStack = menu.slots.get(hotbarSlotId).getStack();
+                ItemStack hotbarStack = menu.slots.get(hotbarSlotId).getItem();
 
                 if (hotbarMode.equals("allbut1")) {
                     // Move all-but-1 from source to hotbar slot
@@ -234,7 +234,7 @@ public abstract class HandledScreenMixin {
         if (shiftPressed && actionType == ClickType.QUICK_MOVE && config.enableFillExisting
                 && config.isFillExistingActive()) {
             ci.cancel();
-            ItemStack sourceStack = slot.getStack();
+            ItemStack sourceStack = slot.getItem();
             if (sourceStack.isEmpty()) return;
 
             var mc = Minecraft.getInstance();
@@ -251,7 +251,7 @@ public abstract class HandledScreenMixin {
             for (int i = 0; i < menu.slots.size(); i++) {
                 if (i == slotId) continue;
                 if (!it_isOtherSide(slotId, i, isPlayerOnlyScreen)) continue;
-                ItemStack destStack = menu.slots.get(i).getStack();
+                ItemStack destStack = menu.slots.get(i).getItem();
                 if (!destStack.isEmpty() && destStack.getItem() == itemType
                         && ItemStack.isSameItemSameComponents(destStack, sourceStack)
                         && destStack.getCount() < destStack.getMaxStackSize()) {
@@ -289,7 +289,7 @@ public abstract class HandledScreenMixin {
             }
 
             InvTweaksConfig.debugLog("FILL", "result | sourceSlotNow=%d | cursorNow=%d",
-                    slot.getStack().getCount(), menu.getCarried().getCount());
+                    slot.getItem().getCount(), menu.getCarried().getCount());
             return;
         }
 
@@ -320,7 +320,7 @@ public abstract class HandledScreenMixin {
                 if (mode.equals("only1")) {
                     // CANCEL vanilla and handle "only1" directly — no undo needed
                     ci.cancel();
-                    ItemStack sourceStack = slot.getStack();
+                    ItemStack sourceStack = slot.getItem();
                     if (sourceStack.isEmpty() || sourceStack.getCount() < 1) return;
 
                     var mc = Minecraft.getInstance();
@@ -342,7 +342,7 @@ public abstract class HandledScreenMixin {
                 }
 
                 // "allbut1" mode: take snapshot and let vanilla proceed, fix in RETURN
-                ItemStack sourceStack = slot.getStack();
+                ItemStack sourceStack = slot.getItem();
                 // If only 1 item, allbut1 is meaningless — let vanilla handle it normally
                 if (sourceStack.getCount() <= 1) {
                     it_shiftClickMode = null;
@@ -359,7 +359,7 @@ public abstract class HandledScreenMixin {
                     Slot s = menu.slots.get(i);
                     boolean isDestination = it_isValidDestination(slotId, i, isPlayerOnlyScreen, slot);
                     if (isDestination) {
-                        ItemStack stack = s.getStack();
+                        ItemStack stack = s.getItem();
                         if (!stack.isEmpty() && stack.getItem() == it_preClickItem) {
                             it_preClickSnapshot.put(i, stack.getCount());
                         } else if (stack.isEmpty()) {
@@ -385,7 +385,7 @@ public abstract class HandledScreenMixin {
         it_bundleInsertMode = null;
         if (!shiftPressed && actionType == ClickType.PICKUP && button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             ItemStack cursorStack = menu.getCarried();
-            ItemStack slotStack = slot.getStack();
+            ItemStack slotStack = slot.getItem();
             if (cursorStack.getItem() instanceof BundleItem && !slotStack.isEmpty()
                     && config.enableBundleInsertCursorBundle) {
                 String mode = config.getActiveMode("bundleInsertBundle");
@@ -428,7 +428,7 @@ public abstract class HandledScreenMixin {
         if (config.enableDebugLogging && config.isAnyModifierPressed()) {
             InvTweaksConfig.debugLog("RETURN", "afterOnMouseClick | slot=%d | button=%d | action=%s | shift=%s | cursorStack=%s(%d) | slotStack=%s(%d)",
                 slotId, button, actionType, shiftPressed,
-                slot.getStack().isEmpty() ? "empty" : slot.getStack().getItem().toString(), slot.getStack().getCount(),
+                slot.getItem().isEmpty() ? "empty" : slot.getItem().getItem().toString(), slot.getItem().getCount(),
                 menu.getCarried().isEmpty() ? "empty" : menu.getCarried().getItem().toString(), menu.getCarried().getCount());
         }
 
@@ -444,7 +444,7 @@ public abstract class HandledScreenMixin {
         // Non-shift PICKUP actions
         if (!shiftPressed && actionType == ClickType.PICKUP) {
             // Bundle extract: right-click on bundle
-            if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT && slot.getStack().getItem() instanceof BundleItem
+            if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT && slot.getItem().getItem() instanceof BundleItem
                     && config.enableBundleExtract) {
                 String mode = config.getActiveMode("bundleExtract");
                 if (mode != null) {
@@ -583,12 +583,12 @@ public abstract class HandledScreenMixin {
 
         // ========== BUNDLE CLIPBOARD HANDLING ==========
         // Bundle operations take priority when hovering a bundle
-        boolean hoveringBundle = hoveredSlot != null && !hoveredSlot.getStack().isEmpty()
-                && hoveredSlot.getStack().getItem() instanceof BundleItem;
+        boolean hoveringBundle = hoveredSlot != null && !hoveredSlot.getItem().isEmpty()
+                && hoveredSlot.getItem().getItem() instanceof BundleItem;
 
         if (copyTriggered && hoveringBundle) {
             InvTweaksConfig.debugLog("BUNDLE-COPY", "copy triggered on bundle | slot=%d", hoveredSlot.id);
-            LayoutClipboard.copyBundleLayout(hoveredSlot.getStack(), hoveredSlot.id);
+            LayoutClipboard.copyBundleLayout(hoveredSlot.getItem(), hoveredSlot.id);
             cir.setReturnValue(true);
             return;
         }
@@ -603,7 +603,7 @@ public abstract class HandledScreenMixin {
 
         if (cutTriggered && hoveringBundle) {
             InvTweaksConfig.debugLog("BUNDLE-COPY", "cut triggered on bundle | slot=%d", hoveredSlot.id);
-            LayoutClipboard.copyBundleLayout(hoveredSlot.getStack(), hoveredSlot.id, true);
+            LayoutClipboard.copyBundleLayout(hoveredSlot.getItem(), hoveredSlot.id, true);
             InvTweaksOverlay.show("Bundle layout copied (cut not supported)", 0xFF55FF55);
             cir.setReturnValue(true);
             return;
@@ -622,7 +622,7 @@ public abstract class HandledScreenMixin {
         // ========== CONTAINER CLASSIFICATION + INCOMPATIBLE BLOCKING ==========
         if (!isPlayerOnly) {
             if (it_containerCategory == null) {
-                net.minecraft.network.chat.Component screenTitle = ((net.minecraft.client.gui.screen.Screen)(Object)this).getTitle();
+                net.minecraft.network.chat.Component screenTitle = ((net.minecraft.client.gui.screens.Screen)(Object)this).getTitle();
                 it_containerCategory = ContainerClassifier.classifyContainer(menu, screenTitle);
                 InvTweaksConfig.debugLog("CLASSIFY", "%s \u2192 %s",
                         menu.getClass().getSimpleName(),
@@ -951,7 +951,7 @@ public abstract class HandledScreenMixin {
         int containerMaxY = Integer.MIN_VALUE;
         for (int i = 0; i < menu.slots.size(); i++) {
             Slot slot = menu.slots.get(i);
-            if (!(slot.inventory instanceof net.minecraft.entity.player.Inventory)) {
+            if (!(slot.container instanceof net.minecraft.world.entity.player.Inventory)) {
                 if (slot.y < containerMinY) containerMinY = slot.y;
                 if (slot.y > containerMaxY) containerMaxY = slot.y;
             }
@@ -968,7 +968,7 @@ public abstract class HandledScreenMixin {
         int midpoint = (containerTopPx + containerBottomPx) / 2;
 
         Minecraft mc = Minecraft.getInstance();
-        double mouseY = mc.mouse.getY() * mc.getWindow().getGuiScaledHeight() / mc.getWindow().getHeight();
+        double mouseY = mc.mouseHandlerHandler.ypos() * mc.getWindow().getGuiScaledHeight() / mc.getWindow().getHeight();
 
         InvTweaksConfig.debugLog("SIZE-MISMATCH", "hover: mouseY=%.0f | containerTop=%d | containerBottom=%d | midpoint=%d",
                 mouseY, containerTopPx, containerBottomPx, midpoint);
@@ -1044,7 +1044,7 @@ public abstract class HandledScreenMixin {
     @Inject(method = "mouseScrolled", at = @At("HEAD"), cancellable = true)
     private void onMouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount, CallbackInfoReturnable<Boolean> cir) {
         // Early exit: let vanilla handle bundle scroll selection
-        if (this.hoveredSlot != null && this.hoveredSlot.getStack().getItem() instanceof BundleItem) {
+        if (this.hoveredSlot != null && this.hoveredSlot.getItem().getItem() instanceof BundleItem) {
             return;
         }
 
@@ -1053,14 +1053,14 @@ public abstract class HandledScreenMixin {
         if (!config.enableScrollTransfer) return;
 
         // Creative inventory has its own scroll behavior (tab scrolling) — don't intercept
-        if (((Object) this) instanceof net.minecraft.client.gui.screen.ingame.CreativeModeInventoryScreen) return;
+        if (((Object) this) instanceof net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen) return;
 
         // Player-only inventory (E key): do nothing for now (deferred to v2)
         if (it_isPlayerOnlyScreen()) return;
 
         // Need a focused slot with items
         if (hoveredSlot == null) return;
-        ItemStack hoveredStack = hoveredSlot.getStack();
+        ItemStack hoveredStack = hoveredSlot.getItem();
         if (hoveredStack.isEmpty()) return;
 
         // Allow scroll even with items on cursor — cursor items stay
@@ -1072,7 +1072,7 @@ public abstract class HandledScreenMixin {
                 hoveredSlot != null ? hoveredSlot.id : -1,
                 hoveredStack.getItem(),
                 hoveredStack.getCount(),
-                hoveredSlot != null ? String.valueOf(hoveredSlot.inventory instanceof net.minecraft.entity.player.Inventory) : "null",
+                hoveredSlot != null ? String.valueOf(hoveredSlot.container instanceof net.minecraft.world.entity.player.Inventory) : "null",
                 String.valueOf(config.isKeyPressed(config.scrollLeave1Key)),
                 verticalAmount);
         if (scrollMode == null) return;
@@ -1083,7 +1083,7 @@ public abstract class HandledScreenMixin {
         if (!scrollUp && !scrollDown) return;
 
         // Determine which side the hovered slot is on
-        boolean hoveredIsPlayer = hoveredSlot.inventory instanceof net.minecraft.entity.player.Inventory;
+        boolean hoveredIsPlayer = hoveredSlot.container instanceof net.minecraft.world.entity.player.Inventory;
 
         // Scroll up = items go UP to chest = scan player side to QUICK_MOVE them
         // Scroll down = items go DOWN to player = scan container side to QUICK_MOVE them
@@ -1105,12 +1105,12 @@ public abstract class HandledScreenMixin {
         java.util.List<Integer> matchingSlots = new java.util.ArrayList<>();
         for (int i = 0; i < menu.slots.size(); i++) {
             Slot s = menu.slots.get(i);
-            if (s.getStack().isEmpty()) continue;
-            if (s.getStack().getItem() != itemType) continue;
-            if (!ItemStack.isSameItemSameComponents(s.getStack(), hoveredStack)) continue;
+            if (s.getItem().isEmpty()) continue;
+            if (s.getItem().getItem() != itemType) continue;
+            if (!ItemStack.isSameItemSameComponents(s.getItem(), hoveredStack)) continue;
 
             // Must be on the side we're scanning
-            boolean slotIsPlayer = s.inventory instanceof net.minecraft.entity.player.Inventory;
+            boolean slotIsPlayer = s.container instanceof net.minecraft.world.entity.player.Inventory;
             if (slotIsPlayer != scanPlayerSide) continue;
 
             matchingSlots.add(i);
@@ -1128,7 +1128,7 @@ public abstract class HandledScreenMixin {
         if (isFillExisting && !isLeave1) {
             // Fill-existing flush: manually merge into partial stacks only, never QUICK_MOVE
             for (int slotId : matchingSlots) {
-                ItemStack slotStack = menu.slots.get(slotId).getStack();
+                ItemStack slotStack = menu.slots.get(slotId).getItem();
                 if (slotStack.isEmpty()) continue;
 
                 if (!it_hasExistingPartialStackOnDest(slotStack, scanPlayerSide)) {
@@ -1145,11 +1145,11 @@ public abstract class HandledScreenMixin {
                 // Merge cursor into each partial stack on destination
                 for (int di = 0; di < menu.slots.size(); di++) {
                     Slot ds = menu.slots.get(di);
-                    boolean dsIsPlayer = ds.inventory instanceof net.minecraft.entity.player.Inventory;
+                    boolean dsIsPlayer = ds.container instanceof net.minecraft.world.entity.player.Inventory;
                     if (dsIsPlayer == scanPlayerSide) continue; // skip source side
-                    if (ds.getStack().isEmpty()) continue;
-                    if (!ItemStack.isSameItemSameComponents(ds.getStack(), sourceRef)) continue;
-                    if (ds.getStack().getCount() >= ds.getStack().getMaxStackSize()) continue;
+                    if (ds.getItem().isEmpty()) continue;
+                    if (!ItemStack.isSameItemSameComponents(ds.getItem(), sourceRef)) continue;
+                    if (ds.getItem().getCount() >= ds.getItem().getMaxStackSize()) continue;
                     im.clickSlot(menu.containerId, di, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.PICKUP, player);
                     InvTweaksConfig.debugLog("SCROLL", "fill-existing merge | src=%d | dest=%d", slotId, di);
                     if (menu.getCarried().isEmpty()) break;
@@ -1158,7 +1158,7 @@ public abstract class HandledScreenMixin {
                 // Put remainder back into source slot
                 if (!menu.getCarried().isEmpty()) {
                     im.clickSlot(menu.containerId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.PICKUP, player);
-                    int remaining = menu.slots.get(slotId).getStack().getCount();
+                    int remaining = menu.slots.get(slotId).getItem().getCount();
                     InvTweaksConfig.debugLog("SCROLL", "fill-existing merge | src=%d | moved=%d | remaining=%d",
                             slotId, beforeCount - remaining, remaining);
                 } else {
@@ -1169,7 +1169,7 @@ public abstract class HandledScreenMixin {
         } else if (isFillExisting && isLeave1) {
             // Leave-1 + fill-existing: move all-but-1, merge into partial stacks only
             for (int slotId : matchingSlots) {
-                ItemStack slotStack = menu.slots.get(slotId).getStack();
+                ItemStack slotStack = menu.slots.get(slotId).getItem();
                 if (slotStack.isEmpty()) continue;
                 if (slotStack.getCount() <= 1) {
                     InvTweaksConfig.debugLog("SCROLL", "leave1 skip | slot=%d | count=1", slotId);
@@ -1191,11 +1191,11 @@ public abstract class HandledScreenMixin {
                 // Merge cursor into each partial stack on destination
                 for (int di = 0; di < menu.slots.size(); di++) {
                     Slot ds = menu.slots.get(di);
-                    boolean dsIsPlayer = ds.inventory instanceof net.minecraft.entity.player.Inventory;
+                    boolean dsIsPlayer = ds.container instanceof net.minecraft.world.entity.player.Inventory;
                     if (dsIsPlayer == scanPlayerSide) continue; // skip source side
-                    if (ds.getStack().isEmpty()) continue;
-                    if (!ItemStack.isSameItemSameComponents(ds.getStack(), sourceRef)) continue;
-                    if (ds.getStack().getCount() >= ds.getStack().getMaxStackSize()) continue;
+                    if (ds.getItem().isEmpty()) continue;
+                    if (!ItemStack.isSameItemSameComponents(ds.getItem(), sourceRef)) continue;
+                    if (ds.getItem().getCount() >= ds.getItem().getMaxStackSize()) continue;
                     im.clickSlot(menu.containerId, di, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.PICKUP, player);
                     InvTweaksConfig.debugLog("SCROLL", "fill-existing merge | src=%d | dest=%d", slotId, di);
                     if (menu.getCarried().isEmpty()) break;
@@ -1204,7 +1204,7 @@ public abstract class HandledScreenMixin {
                 // Put remainder back into source slot (merge with the 1 left behind)
                 if (!menu.getCarried().isEmpty()) {
                     im.clickSlot(menu.containerId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.PICKUP, player);
-                    int remaining = menu.slots.get(slotId).getStack().getCount();
+                    int remaining = menu.slots.get(slotId).getItem().getCount();
                     InvTweaksConfig.debugLog("SCROLL", "fill-existing merge | src=%d | moved=%d | remaining=%d",
                             slotId, beforeCount - remaining, remaining);
                 } else {
@@ -1215,7 +1215,7 @@ public abstract class HandledScreenMixin {
         } else if (!isLeave1) {
             // Flush mode (no fill-existing): shift-click every matching slot to move full stacks
             for (int slotId : matchingSlots) {
-                ItemStack slotStack = menu.slots.get(slotId).getStack();
+                ItemStack slotStack = menu.slots.get(slotId).getItem();
                 if (slotStack.isEmpty()) continue;
 
                 InvTweaksConfig.debugLog("SCROLL", "flush QUICK_MOVE | slot=%d | count=%d", slotId, slotStack.getCount());
@@ -1224,7 +1224,7 @@ public abstract class HandledScreenMixin {
         } else {
             // Leave-1 mode (no fill-existing): move all but 1 via temp slot + QUICK_MOVE
             for (int slotId : matchingSlots) {
-                ItemStack slotStack = menu.slots.get(slotId).getStack();
+                ItemStack slotStack = menu.slots.get(slotId).getItem();
                 if (slotStack.isEmpty()) continue;
                 if (slotStack.getCount() <= 1) {
                     InvTweaksConfig.debugLog("SCROLL", "leave1 skip | slot=%d | count=1", slotId);
@@ -1252,11 +1252,11 @@ public abstract class HandledScreenMixin {
                         boolean deposited = false;
                         for (int di = 0; di < menu.slots.size(); di++) {
                             Slot ds = menu.slots.get(di);
-                            boolean dsIsPlayer = ds.inventory instanceof net.minecraft.entity.player.Inventory;
+                            boolean dsIsPlayer = ds.container instanceof net.minecraft.world.entity.player.Inventory;
                             if (dsIsPlayer == scanPlayerSide) continue;
-                            if (ds.getStack().isEmpty()) continue;
-                            if (ds.getStack().getItem() != itemType) continue;
-                            if (ds.getStack().getCount() >= ds.getStack().getMaxStackSize()) continue;
+                            if (ds.getItem().isEmpty()) continue;
+                            if (ds.getItem().getItem() != itemType) continue;
+                            if (ds.getItem().getCount() >= ds.getItem().getMaxStackSize()) continue;
                             im.clickSlot(menu.containerId, di, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.PICKUP, player);
                             InvTweaksConfig.debugLog("SCROLL", "leave1 merged into dest slot %d", di);
                             if (menu.getCarried().isEmpty()) {
@@ -1289,9 +1289,9 @@ public abstract class HandledScreenMixin {
         for (int i = 0; i < menu.slots.size(); i++) {
             if (i == sourceSlotId) continue;
             Slot s = menu.slots.get(i);
-            if (!s.getStack().isEmpty()) continue;
+            if (!s.getItem().isEmpty()) continue;
 
-            boolean slotIsPlayer = s.inventory instanceof net.minecraft.entity.player.Inventory;
+            boolean slotIsPlayer = s.container instanceof net.minecraft.world.entity.player.Inventory;
             if (slotIsPlayer != sourceIsPlayer) continue;
 
             // For player inventory, skip crafting/armor slots (indices 0-8 in InventoryScreen)
@@ -1311,9 +1311,9 @@ public abstract class HandledScreenMixin {
     private boolean it_hasExistingPartialStackOnDest(ItemStack sourceStack, boolean scanPlayerSide) {
         for (int i = 0; i < menu.slots.size(); i++) {
             Slot s = menu.slots.get(i);
-            boolean slotIsPlayer = s.inventory instanceof net.minecraft.entity.player.Inventory;
+            boolean slotIsPlayer = s.container instanceof net.minecraft.world.entity.player.Inventory;
             if (slotIsPlayer == scanPlayerSide) continue;
-            ItemStack destStack = s.getStack();
+            ItemStack destStack = s.getItem();
             if (destStack.isEmpty()) continue;
             if (!ItemStack.isSameItemSameComponents(destStack, sourceStack)) continue;
             if (destStack.getCount() < destStack.getMaxStackSize()) return true;
@@ -1347,13 +1347,13 @@ public abstract class HandledScreenMixin {
 
     @Unique
     private void it_handlePickup(Slot slot, int slotId, MultiPlayerGameMode im,
-            net.minecraft.entity.player.Player player, String mode) {
+            net.minecraft.world.entity.player.Player player, String mode) {
         var cursorStack = menu.getCarried();
         if (cursorStack.isEmpty()) return;
         int cursorCount = cursorStack.getCount();
-        if (slot.getStack().getCount() > 0 || cursorCount <= 1) return;
+        if (slot.getItem().getCount() > 0 || cursorCount <= 1) return;
 
-        if (InvTweaksConfig.get().enableDebugLogging) InvTweaksConfig.debugLog("PICKUP", "%s mode | cursorCount=%d | slotCount=%d", mode, cursorCount, slot.getStack().getCount());
+        if (InvTweaksConfig.get().enableDebugLogging) InvTweaksConfig.debugLog("PICKUP", "%s mode | cursorCount=%d | slotCount=%d", mode, cursorCount, slot.getItem().getCount());
 
         if (mode.equals("allbut1")) {
             im.clickSlot(menu.containerId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, ClickType.PICKUP, player);
@@ -1371,11 +1371,11 @@ public abstract class HandledScreenMixin {
 
     @Unique
     private void it_handleMacOSCtrlClick(Slot slot, int slotId, MultiPlayerGameMode im,
-            net.minecraft.entity.player.Player player, String mode) {
+            net.minecraft.world.entity.player.Player player, String mode) {
         var cursorStack = menu.getCarried();
         if (cursorStack.isEmpty()) return;
         int cursorCount = cursorStack.getCount();
-        int slotCount = slot.getStack().getCount();
+        int slotCount = slot.getItem().getCount();
 
         if (cursorCount > 0 && slotCount > 0) {
             im.clickSlot(menu.containerId, slotId, GLFW.GLFW_MOUSE_BUTTON_LEFT, ClickType.PICKUP, player);
@@ -1390,10 +1390,10 @@ public abstract class HandledScreenMixin {
 
     @Unique
     private void it_handleShiftClick(Slot slot, int slotId, MultiPlayerGameMode im,
-            net.minecraft.entity.player.Player player, String mode) {
+            net.minecraft.world.entity.player.Player player, String mode) {
         // This menu only processes "allbut1" mode.
         // "only1" is handled directly in HEAD with ci.cancel().
-        ItemStack remaining = slot.getStack();
+        ItemStack remaining = slot.getItem();
 
         if (remaining.isEmpty() && it_preClickItem != null && it_preClickSnapshot != null) {
             // Vanilla moved everything. Find ALL destination slots where items increased.
@@ -1408,7 +1408,7 @@ public abstract class HandledScreenMixin {
             for (Map.Entry<Integer, Integer> entry : it_preClickSnapshot.entrySet()) {
                 int idx = entry.getKey();
                 int oldCount = entry.getValue();
-                ItemStack current = menu.getSlot(idx).getStack();
+                ItemStack current = menu.getSlot(idx).getItem();
                 int newCount = (!current.isEmpty() && current.getItem() == it_preClickItem) ? current.getCount() : 0;
                 int increase = newCount - oldCount;
                 if (increase > 0) {
@@ -1481,7 +1481,7 @@ public abstract class HandledScreenMixin {
 
     @Unique
     private void it_handleBundleExtract(Slot slot, int slotId, MultiPlayerGameMode im,
-            net.minecraft.entity.player.Player player, String mode) {
+            net.minecraft.world.entity.player.Player player, String mode) {
         var cursorStack = menu.getCarried();
         if (cursorStack.isEmpty() || cursorStack.getCount() <= 1) return;
 
@@ -1514,7 +1514,7 @@ public abstract class HandledScreenMixin {
 
     @Unique
     private void it_handleBundleInsert(Slot slot, int slotId, MultiPlayerGameMode im,
-            net.minecraft.entity.player.Player player) {
+            net.minecraft.world.entity.player.Player player) {
         boolean reverse = it_bundleInsertReverse;
         String mode = it_bundleInsertMode;
         it_bundleInsertPending = false;
@@ -1530,12 +1530,12 @@ public abstract class HandledScreenMixin {
 
     @Unique
     private void it_handleBundleInsertForward(Slot slot, int slotId, MultiPlayerGameMode im,
-            net.minecraft.entity.player.Player player, String mode) {
-        int slotCount = slot.getStack().getCount();
+            net.minecraft.world.entity.player.Player player, String mode) {
+        int slotCount = slot.getItem().getCount();
 
         if (slotCount == 0 && it_bundleInsertSlotCount > 1) {
             im.clickSlot(menu.containerId, slotId, GLFW.GLFW_MOUSE_BUTTON_RIGHT, ClickType.PICKUP, player);
-            int newSlotCount = slot.getStack().getCount();
+            int newSlotCount = slot.getItem().getCount();
             if (newSlotCount <= 1) return;
 
             int tempSlot = it_findEmptyPlayerSlot(slotId);
@@ -1564,7 +1564,7 @@ public abstract class HandledScreenMixin {
 
     @Unique
     private void it_handleBundleInsertReverse(Slot slot, int slotId, MultiPlayerGameMode im,
-            net.minecraft.entity.player.Player player, String mode) {
+            net.minecraft.world.entity.player.Player player, String mode) {
         ItemStack cursorNow = menu.getCarried();
 
         if (cursorNow.isEmpty() && it_bundleInsertSlotCount > 1) {
@@ -1600,7 +1600,7 @@ public abstract class HandledScreenMixin {
      */
     @Unique
     private void it_debugClickSlot(MultiPlayerGameMode im, int containerId, int slotId, int button,
-            ClickType action, net.minecraft.entity.player.Player player, String tag) {
+            ClickType action, net.minecraft.world.entity.player.Player player, String tag) {
         InvTweaksConfig.debugLog("CLICK", "synthetic | tag=%s | slot=%d | button=%d | action=%s", tag, slotId, button, action);
         im.clickSlot(containerId, slotId, button, action, player);
     }
@@ -1618,7 +1618,7 @@ public abstract class HandledScreenMixin {
         // For container screens, search for the slot with the matching hotbar inventory index
         for (int i = 0; i < menu.slots.size(); i++) {
             Slot s = menu.slots.get(i);
-            if (s.inventory instanceof net.minecraft.entity.player.Inventory && s.getIndex() == hotbarIndex) {
+            if (s.container instanceof net.minecraft.world.entity.player.Inventory && s.getContainerSlot() == hotbarIndex) {
                 return i;
             }
         }
@@ -1630,15 +1630,15 @@ public abstract class HandledScreenMixin {
         if (it_isPlayerOnlyScreen()) {
             for (int i = 1; i <= 4; i++) {
                 if (i == excludeSlotId) continue;
-                if (i < menu.slots.size() && menu.slots.get(i).getStack().isEmpty()) return i;
+                if (i < menu.slots.size() && menu.slots.get(i).getItem().isEmpty()) return i;
             }
         }
         for (int i = 0; i < menu.slots.size(); i++) {
             if (i == excludeSlotId) continue;
             Slot s = menu.slots.get(i);
-            if (!(s.inventory instanceof net.minecraft.entity.player.Inventory)) continue;
-            int invIndex = s.getIndex();
-            if (invIndex >= 9 && invIndex <= 44 && s.getStack().isEmpty()) return i;
+            if (!(s.container instanceof net.minecraft.world.entity.player.Inventory)) continue;
+            int invIndex = s.getContainerSlot();
+            if (invIndex >= 9 && invIndex <= 44 && s.getItem().isEmpty()) return i;
         }
         return -1;
     }
@@ -1648,15 +1648,15 @@ public abstract class HandledScreenMixin {
         if (it_isPlayerOnlyScreen()) {
             for (int i = 1; i <= 4; i++) {
                 if (i == exclude1 || i == exclude2) continue;
-                if (i < menu.slots.size() && menu.slots.get(i).getStack().isEmpty()) return i;
+                if (i < menu.slots.size() && menu.slots.get(i).getItem().isEmpty()) return i;
             }
         }
         for (int i = 0; i < menu.slots.size(); i++) {
             if (i == exclude1 || i == exclude2) continue;
             Slot s = menu.slots.get(i);
-            if (!(s.inventory instanceof net.minecraft.entity.player.Inventory)) continue;
-            int invIndex = s.getIndex();
-            if (invIndex >= 9 && invIndex <= 44 && s.getStack().isEmpty()) return i;
+            if (!(s.container instanceof net.minecraft.world.entity.player.Inventory)) continue;
+            int invIndex = s.getContainerSlot();
+            if (invIndex >= 9 && invIndex <= 44 && s.getItem().isEmpty()) return i;
         }
         return -1;
     }
@@ -1667,20 +1667,20 @@ public abstract class HandledScreenMixin {
         for (int i = 0; i < menu.slots.size(); i++) {
             if (i == sourceSlotId) continue;
             if (!it_isOtherSide(sourceSlotId, i, isPlayerOnly)) continue;
-            ItemStack stack = menu.slots.get(i).getStack();
+            ItemStack stack = menu.slots.get(i).getItem();
             if (!stack.isEmpty() && stack.getItem() == item && stack.getCount() < stack.getMaxStackSize()) return i;
         }
         for (int i = 0; i < menu.slots.size(); i++) {
             if (i == sourceSlotId) continue;
             if (!it_isOtherSide(sourceSlotId, i, isPlayerOnly)) continue;
-            if (menu.slots.get(i).getStack().isEmpty()) return i;
+            if (menu.slots.get(i).getItem().isEmpty()) return i;
         }
         return -1;
     }
 
     @Unique
     private boolean it_isPlayerOnlyScreen() {
-        return ((Object) this) instanceof net.minecraft.client.gui.screen.ingame.InventoryScreen;
+        return ((Object) this) instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen;
     }
 
     @Unique
@@ -1704,8 +1704,8 @@ public abstract class HandledScreenMixin {
             return candidateRegion != sourceRegion;
         } else {
             Slot candidate = menu.slots.get(candidateSlotId);
-            boolean sourceIsPlayer = sourceSlot.inventory instanceof net.minecraft.entity.player.Inventory;
-            boolean candidateIsPlayer = candidate.inventory instanceof net.minecraft.entity.player.Inventory;
+            boolean sourceIsPlayer = sourceSlot.container instanceof net.minecraft.world.entity.player.Inventory;
+            boolean candidateIsPlayer = candidate.container instanceof net.minecraft.world.entity.player.Inventory;
             return sourceIsPlayer != candidateIsPlayer;
         }
     }
@@ -1721,8 +1721,8 @@ public abstract class HandledScreenMixin {
         } else {
             Slot source = menu.slots.get(sourceSlotId);
             Slot candidate = menu.slots.get(candidateSlotId);
-            boolean sourceIsPlayer = source.inventory instanceof net.minecraft.entity.player.Inventory;
-            boolean candidateIsPlayer = candidate.inventory instanceof net.minecraft.entity.player.Inventory;
+            boolean sourceIsPlayer = source.container instanceof net.minecraft.world.entity.player.Inventory;
+            boolean candidateIsPlayer = candidate.container instanceof net.minecraft.world.entity.player.Inventory;
             return sourceIsPlayer != candidateIsPlayer;
         }
     }

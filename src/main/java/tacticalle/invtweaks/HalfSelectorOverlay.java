@@ -134,8 +134,8 @@ public class HalfSelectorOverlay {
         rightGridH = gridH;
 
         // Get mouse position
-        double mouseX = mc.mouse.getX() * screenWidth / mc.getWindow().getWidth();
-        double mouseY = mc.mouse.getY() * screenHeight / mc.getWindow().getHeight();
+        double mouseX = mc.mouseHandler.getX() * screenWidth / mc.getWindow().getWidth();
+        double mouseY = mc.mouseHandlerHandler.ypos() * screenHeight / mc.getWindow().getHeight();
 
         boolean hoverLeft = mouseX >= leftGridX - 4 && mouseX <= leftGridX + leftGridW + 4
                 && mouseY >= leftGridY - 4 && mouseY <= leftGridY + leftGridH + 4;

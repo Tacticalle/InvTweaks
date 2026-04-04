@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -26,13 +26,13 @@ public class InvTweaksClient implements ClientModInitializer {
 
     // Death detection state
     private static boolean wasAlive = true;
-    private static java.util.Map<Integer, net.minecraft.item.ItemStack> cachedInventoryStacks = new java.util.LinkedHashMap<>();
+    private static java.util.Map<Integer, net.minecraft.world.item.ItemStack> cachedInventoryStacks = new java.util.LinkedHashMap<>();
     private static boolean cachedInventoryValid = false;
 
     @Override
     public void onInitializeClient() {
         // Register keybind to open config screen (default: K)
-        openConfigKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+        openConfigKey = KeyMappingHelper.registerKeyBinding(new KeyMapping(
                 "key.invtweaks.open_config",
                 InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_K,
@@ -70,7 +70,7 @@ public class InvTweaksClient implements ClientModInitializer {
                 if (isAlive) {
                     // Cache inventory ItemStack copies every tick while alive
                     cachedInventoryStacks.clear();
-                    net.minecraft.entity.player.Inventory inv = client.player.getInventory();
+                    net.minecraft.world.entity.player.Inventory inv = client.player.getInventory();
                     // Main inventory (keys 0-35) and hotbar
                     for (int i = 0; i < 36; i++) {
                         cachedInventoryStacks.put(i, inv.getStack(i).copy());
@@ -88,9 +88,9 @@ public class InvTweaksClient implements ClientModInitializer {
                     // Player just died — convert cached stacks to SlotData with component serialization
                     InvTweaksConfig.debugLog("DEATH", "Player died, auto-copying cached inventory layout");
                     java.util.Map<Integer, LayoutClipboard.SlotData> slotDataMap = new java.util.LinkedHashMap<>();
-                    for (java.util.Map.Entry<Integer, net.minecraft.item.ItemStack> entry : cachedInventoryStacks.entrySet()) {
+                    for (java.util.Map.Entry<Integer, net.minecraft.world.item.ItemStack> entry : cachedInventoryStacks.entrySet()) {
                         int invSlot = entry.getKey();
-                        net.minecraft.item.ItemStack stack = entry.getValue();
+                        net.minecraft.world.item.ItemStack stack = entry.getValue();
                         // Fix armor key mapping: Inventory slot 36(FEET)→snapshot 39,
                         // 37(LEGS)→38, 38(CHEST)→37, 39(HEAD)→36
                         // This matches copyLayout where handler slot 5(HEAD)→key 36, 8(FEET)→key 39

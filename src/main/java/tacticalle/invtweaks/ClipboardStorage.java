@@ -3,7 +3,7 @@ package tacticalle.invtweaks;
 import com.google.gson.*;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.item.Item;
-import net.minecraft.item.Items;
+import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import org.slf4j.Logger;
@@ -70,7 +70,7 @@ public class ClipboardStorage {
                         slotsObj.add(String.valueOf(slotEntry.getKey()), JsonNull.INSTANCE);
                     } else {
                         JsonObject slotObj = new JsonObject();
-                        slotObj.addProperty("item", BuiltInRegistries.ITEM.getId(sd.item()).toString());
+                        slotObj.addProperty("item", BuiltInRegistries.ITEM.getKey(sd.item()).toString());
                         slotObj.addProperty("count", sd.count());
                         if (sd.components() != null) {
                             slotObj.addProperty("components", sd.components());
